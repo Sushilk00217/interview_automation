@@ -122,6 +122,11 @@ export interface CandidateResponse {
     login_disabled: boolean;
     created_at: string;
     job_description?: string;
+    parse_status?: string | null;
+    parsed_at?: string | null;
+    resume_json?: any;
+    jd_json?: any;
+    match_score?: number | null;
 }
 
 export interface ToggleLoginResponse {

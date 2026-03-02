@@ -12,6 +12,25 @@ export interface InterviewTemplate {
     description: string;
     total_duration_sec: number;
     is_active: boolean;
+    is_rule_based?: boolean;
+}
+
+export interface GeneratedQuestion {
+    question_id?: string;
+    question_text: string;
+    category?: string;
+    difficulty?: string;
+    order: number;
+    time_limit_sec: number;
+}
+
+export interface ApplyTemplateRequest {
+    questions: {
+        question_id?: string;
+        question_text: string;
+        order: number;
+        time_limit_sec: number;
+    }[];
 }
 
 export interface CandidateInterview {

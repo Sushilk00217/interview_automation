@@ -8,7 +8,7 @@ for question generation.
 import os
 import logging
 from typing import Dict, Any, Optional
-import PyPDF2
+import pypdf
 import io
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class ResumeJDParser:
         """
         try:
             with open(resume_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = pypdf.PdfReader(file)
                 text_content = []
                 
                 for page in pdf_reader.pages:
@@ -70,7 +70,7 @@ class ResumeJDParser:
             Dictionary containing parsed resume data
         """
         try:
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(resume_bytes))
+            pdf_reader = pypdf.PdfReader(io.BytesIO(resume_bytes))
             text_content = []
             
             for page in pdf_reader.pages:

@@ -58,11 +58,33 @@ async function parseError(res: Response): Promise<SchedulingApiError> {
 // ─── Templates ───────────────────────────────────────────────────────────────
 
 export async function fetchInterviewTemplates(): Promise<InterviewTemplate[]> {
-    const res = await fetch(`${BASE_URL}/api/v1/admin/interviews/templates`, {
+    const res = await fetch(`${BASE_URL}/api/v1/admin/templates`, {
         headers: authHeaders(),
     });
     if (!res.ok) throw await parseError(res);
     return res.json();
+}
+
+export async function generateTemplatePreview(
+    templateId: string
+): Promise<any[]> {
+    const res = await fetch(`${BASE_URL}/api/v1/admin/templates/${templateId}/generate-preview`, {
+        headers: authHeaders(),
+    });
+    if (!res.ok) throw await parseError(res);
+    return res.json();
+}
+
+export async function applyTemplateToInterview(
+    interviewId: string,
+    data: any
+): Promise<void> {
+    const res = await fetch(`${BASE_URL}/api/v1/admin/interviews/${interviewId}/apply-template`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw await parseError(res);
 }
 
 // ─── Candidate interviews (lookup by candidate_id) ───────────────────────────

@@ -48,7 +48,10 @@ class InterviewRepository(BaseRepository[Interview]):
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
-    async def get_all_summary(self) -> List[dict]:
+    async def get_all_summary(self, limit: int = 10, offset: int = 0, search: str = "") -> dict:
+        from sqlalchemy import func, or_
+        from app.db.sql.models.user import User, CandidateProfile
+        
         stmt = select(
             Interview.id,
             Interview.candidate_id,
@@ -56,8 +59,26 @@ class InterviewRepository(BaseRepository[Interview]):
             Interview.scheduled_at,
             Interview.overall_score,
         )
+        count_stmt = select(func.count(Interview.id))
+        
+        if search:
+            search_term = f"%{search}%"
+            join_cond = Interview.candidate_id == User.id
+            filters = or_(
+                CandidateProfile.first_name.ilike(search_term),
+                CandidateProfile.last_name.ilike(search_term),
+            )
+            
+            stmt = stmt.outerjoin(User, join_cond).outerjoin(CandidateProfile, User.id == CandidateProfile.user_id).where(filters)
+            count_stmt = count_stmt.outerjoin(User, join_cond).outerjoin(CandidateProfile, User.id == CandidateProfile.user_id).where(filters)
+            
+        stmt = stmt.order_by(Interview.created_at.desc()).offset(offset).limit(limit)
+        
         result = await self.session.execute(stmt)
-        return [
+        total_result = await self.session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        
+        data = [
             {
                 "interview_id": row.id,
                 "candidate_id": row.candidate_id,
@@ -67,3 +88,8 @@ class InterviewRepository(BaseRepository[Interview]):
             }
             for row in result.all()
         ]
+        
+        return {
+            "data": data,
+            "total": total
+        }

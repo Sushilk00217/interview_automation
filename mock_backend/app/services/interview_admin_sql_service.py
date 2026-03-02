@@ -125,9 +125,37 @@ class InterviewAdminSQLService:
             return interview
 
     @staticmethod
-    async def get_interview_summary(session: AsyncSession) -> List[Dict[str, Any]]:
+    async def get_interview_summary(session: AsyncSession, limit: int = 10, offset: int = 0, search: str = "") -> Dict[str, Any]:
         async with UnitOfWork(session) as uow:
-            return await uow.interviews.get_all_summary()
+            return await uow.interviews.get_all_summary(limit=limit, offset=offset, search=search)
+
+    @staticmethod
+    async def apply_template_to_interview(session: AsyncSession, interview_id: uuid.UUID, questions: List[Dict[str, Any]]) -> List[Any]:
+        async with UnitOfWork(session) as uow:
+            # 1. Fetch interview
+            interview = await uow.interviews.get_by_id(interview_id)
+            if not interview:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found")
+            
+            # 2. Clear existing session questions if any
+            interview.session_questions = []
+            
+            # 3. Insert new questions
+            from app.db.sql.models.interview import InterviewSessionQuestion
+            
+            for idx, q_data in enumerate(questions):
+                q_id_str = q_data.get("question_id")
+                sq = InterviewSessionQuestion(
+                    interview_id=interview_id,
+                    question_id=uuid.UUID(q_id_str) if q_id_str else None,
+                    question_text=q_data["question_text"],
+                    order=idx,
+                    time_limit_sec=q_data["time_limit_sec"]
+                )
+                interview.session_questions.append(sq)
+            
+            await uow.flush()
+            return interview.session_questions
 
     @staticmethod
     async def list_active_templates(session: AsyncSession) -> List[Dict[str, Any]]:

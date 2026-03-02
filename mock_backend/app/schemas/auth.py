@@ -28,9 +28,20 @@ class CandidateResponse(BaseModel):
     login_disabled: bool
     created_at: datetime
     job_description: Optional[str] = None
+    parse_status: Optional[str] = None
+    parsed_at: Optional[datetime] = None
+    resume_json: Optional[dict] = None
+    jd_json: Optional[dict] = None
+    match_score: Optional[float] = None
 
     class Config:
         from_attributes = True
+
+class PaginatedCandidateResponse(BaseModel):
+    data: List[CandidateResponse]
+    total: int
+    limit: int
+    offset: int
 
 class AdminProfilePayload(BaseModel):
     first_name: str

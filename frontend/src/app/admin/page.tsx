@@ -14,9 +14,10 @@ import {
 import { CandidateResponse } from '@/types/api';
 import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
+import ResumePreviewModal from '@/components/admin/ResumePreviewModal';
 import { Toast, useToast } from '@/components/ui/Toast';
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Types ----------------------------------------------------------------------
 
 interface DashboardStats {
     total_interviews: number;
@@ -29,7 +30,7 @@ interface CandidateRow extends CandidateResponse {
     summary: InterviewSummaryItem | null;
 }
 
-// â”€â”€â”€ Status badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Status badge ---------------------------------------------------------------
 
 const STATUS_STYLES: Record<string, string> = {
     scheduled: 'bg-blue-100 text-blue-800',
@@ -56,7 +57,42 @@ function InterviewStatusBadge({ status }: { status: string }) {
     );
 }
 
-// â”€â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const RESUME_STATUS_STYLES: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    success: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
+    none: 'bg-gray-100 text-gray-500',
+};
+
+const RESUME_STATUS_LABELS: Record<string, string> = {
+    pending: 'Parsing',
+    success: 'Parsed',
+    failed: 'Failed',
+    none: 'Not Started',
+};
+
+function ResumeStatusBadge({ status }: { status?: string | null }) {
+    const key = status && status in RESUME_STATUS_STYLES ? status : 'none';
+    return (
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${RESUME_STATUS_STYLES[key]}`}>
+            {RESUME_STATUS_LABELS[key]}
+        </span>
+    );
+}
+
+function MatchScoreBadge({ score }: { score?: number | null }) {
+    if (score == null) return <span className="text-gray-300 text-xs">-</span>;
+    const style = score >= 85 ? 'bg-green-100 text-green-800' :
+        score >= 70 ? 'bg-yellow-100 text-yellow-800' :
+            'bg-red-100 text-red-800';
+    return (
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${style}`}>
+            {score.toFixed(1)}
+        </span>
+    );
+}
+
+// --- Main page ------------------------------------------------------------------
 
 export default function AdminDashboardPage() {
     const router = useRouter();
@@ -65,10 +101,18 @@ export default function AdminDashboardPage() {
 
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [candidates, setCandidates] = useState<CandidateRow[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [totalCandidates, setTotalCandidates] = useState(0);
+    const [limit, setLimit] = useState(10);
+    const [offset, setOffset] = useState(0);
+    const [search, setSearch] = useState('');
+    const [sortBy, setSortBy] = useState('created_at');
+    const [order, setOrder] = useState('desc');
+
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [candidatesLoading, setCandidatesLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // â”€â”€ Register modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Register modal ----------------------------------------------------------
     const [showRegisterModal, setShowRegisterModal] = useState(false);
     const [registerLoading, setRegisterLoading] = useState(false);
     const [registerError, setRegisterError] = useState('');
@@ -78,16 +122,17 @@ export default function AdminDashboardPage() {
     const [jobDescription, setJobDescription] = useState('');
     const [resumeFile, setResumeFile] = useState<File | null>(null);
 
-    // â”€â”€ Schedule / Reschedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Schedule / Reschedule ---------------------------------------------------
     const [scheduleTarget, setScheduleTarget] = useState<CandidateRow | null>(null);
     const [scheduleMode, setScheduleMode] = useState<'schedule' | 'reschedule'>('schedule');
 
-    // â”€â”€ Cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Cancel ------------------------------------------------------------------
     const [cancelTarget, setCancelTarget] = useState<CandidateRow | null>(null);
     const [summaryTarget, setSummaryTarget] = useState<CandidateRow | null>(null);
+    const [previewTarget, setPreviewTarget] = useState<CandidateRow | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
 
-    // â”€â”€â”€ Auth guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // --- Auth guard -------------------------------------------------------------
     useEffect(() => {
         if (!_hasHydrated) return;  // wait for localStorage rehydration
         if (!isAuthenticated || !user) { router.push('/login/admin'); return; }
@@ -95,27 +140,67 @@ export default function AdminDashboardPage() {
             router.push(user.role === 'candidate' ? '/candidate' : '/login/admin');
             return;
         }
-        fetchData();
+        fetchStats();
     }, [_hasHydrated, isAuthenticated, user, router]);
 
-    // â”€â”€â”€ Fetch all data + build merged rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const fetchData = useCallback(async () => {
-        setLoading(true);
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchCandidates();
+        }
+    }, [isAuthenticated, limit, offset, search, sortBy, order]);
+
+    const fetchStats = async () => {
+        setStatsLoading(true);
+        try {
+            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+            const res = await fetch(`${baseUrl}/api/v1/dashboard/stats`);
+            if (res.ok) {
+                setStats(await res.json());
+            } else {
+                setStats({ total_interviews: 0, completed: 0, pending: 0, flagged: 0 });
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    const fetchCandidates = useCallback(async () => {
+        setCandidatesLoading(true);
         setError('');
         try {
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+            const currentToken = useAuthStore.getState().token;
+            const authHeader: Record<string, string> = currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {};
 
-            const [statsRes, candidatesData, summaryData] = await Promise.all([
-                fetch(`${baseUrl}/api/v1/dashboard/stats`).then(r =>
-                    r.ok ? r.json() : { total_interviews: 0, completed: 0, pending: 0, flagged: 0 }
-                ),
-                dashboardService.getCandidates(),
-                fetchInterviewSummary().catch(() => [] as InterviewSummaryItem[]),
+            const params = new URLSearchParams({
+                limit: limit.toString(),
+                offset: offset.toString(),
+                search: search,
+                sort_by: sortBy,
+                order: order
+            });
+
+            const [candidatesRes, summaryRes] = await Promise.all([
+                fetch(`${baseUrl}/api/v1/auth/admin/candidates?${params.toString()}`, { headers: authHeader }).then(async r => {
+                    if (!r.ok) throw new Error('Failed to fetch candidates');
+                    return r.json();
+                }),
+                fetch(`${baseUrl}/api/v1/admin/interviews/summary?${params.toString()}`, { headers: authHeader }).then(async r => {
+                    if (!r.ok) return { data: [] };
+                    return r.json();
+                }).catch(() => ({ data: [] })),
             ]);
 
-            setStats(statsRes);
+            setTotalCandidates(candidatesRes.total || 0);
 
-            // Build a map: candidate_id â†’ most-relevant interview summary
+            let summaryData: InterviewSummaryItem[] = summaryRes?.data ?? [];
+            if (!Array.isArray(summaryData)) {
+                summaryData = [];
+            }
+
+            // Build a map: candidate_id -> most-relevant interview summary
             // Priority: scheduled > in_progress > completed > cancelled
             const PRIORITY: Record<string, number> = {
                 scheduled: 4, in_progress: 3, completed: 2, cancelled: 1,
@@ -128,19 +213,24 @@ export default function AdminDashboardPage() {
                 }
             }
 
-            const rows: CandidateRow[] = candidatesData.map(c => ({
+            const rows: CandidateRow[] = (candidatesRes.data || []).map((c: any) => ({
                 ...c,
                 summary: summaryMap.get(c.id) ?? null,
             }));
             setCandidates(rows);
         } catch (err: any) {
-            setError(err.message || 'Failed to load dashboard data.');
+            setError(err.message || 'Failed to load candidates.');
         } finally {
-            setLoading(false);
+            setCandidatesLoading(false);
         }
-    }, []);
+    }, [limit, offset, search]);
 
-    // â”€â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const fetchData = useCallback(() => {
+        fetchStats();
+        fetchCandidates();
+    }, [fetchCandidates]);
+
+    // --- Handlers ---------------------------------------------------------------
 
     const handleLogout = () => { logout(); router.push('/login/admin'); };
     const handleAuthError = () => { logout(); router.push('/login/admin'); };
@@ -155,6 +245,16 @@ export default function AdminDashboardPage() {
             toast.success(response.login_disabled ? 'Login disabled.' : 'Login enabled.');
         } catch (err: any) {
             toast.error(err.message || 'Failed to toggle login status.');
+        }
+    };
+
+    const handleReparseResume = async (candidateId: string) => {
+        try {
+            await dashboardService.reparseResume(candidateId);
+            toast.success('Reparsing started...');
+            fetchCandidates();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to trigger reparsing.');
         }
     };
 
@@ -214,14 +314,14 @@ export default function AdminDashboardPage() {
         }
     };
 
-    // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // --- Render -----------------------------------------------------------------
 
-    if (loading && candidates.length === 0) {
+    if ((statsLoading || candidatesLoading) && candidates.length === 0) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Loading dashboardâ€¦</p>
+                    <p className="text-gray-600">Loading dashboard...</p>
                 </div>
             </div>
         );
@@ -230,7 +330,7 @@ export default function AdminDashboardPage() {
     return (
         <div className="min-h-screen bg-gray-50">
 
-            {/* ── Candidate Summary Modal ──────────────────────────────────────────── */}
+            {/* -- Candidate Summary Modal -------------------------------------------- */}
             {summaryTarget && summaryTarget.summary?.overall_score != null && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative animate-in fade-in zoom-in-95">
@@ -247,7 +347,7 @@ export default function AdminDashboardPage() {
                         {/* Header */}
                         <div className="mb-5">
                             <h2 className="text-lg font-bold text-gray-900">Interview Results</h2>
-                            <p className="text-sm text-gray-500 mt-0.5">{summaryTarget.username} &mdash; {summaryTarget.email}</p>
+                            <p className="text-sm text-gray-500 mt-0.5">{summaryTarget.username} - {summaryTarget.email}</p>
                         </div>
 
                         {/* Score ring */}
@@ -279,7 +379,7 @@ export default function AdminDashboardPage() {
                         <div className="flex justify-center mb-5">
                             {(() => {
                                 const score = summaryTarget.summary!.overall_score!;
-                                const label = score >= 85 ? 'Strong — Proceed' : score >= 70 ? 'Recommend Review' : 'Needs Improvement';
+                                const label = score >= 85 ? 'Strong - Proceed' : score >= 70 ? 'Recommend Review' : 'Needs Improvement';
                                 const cls = score >= 85
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     : score >= 70
@@ -358,31 +458,66 @@ export default function AdminDashboardPage() {
                         { label: 'Total Interviews', value: stats?.total_interviews ?? 0, color: 'text-gray-900' },
                         { label: 'Completed', value: stats?.completed ?? 0, color: 'text-green-600' },
                         { label: 'Pending Review', value: stats?.pending ?? 0, color: 'text-yellow-600' },
-                        { label: 'Candidates', value: candidates.length, color: 'text-blue-600' },
+                        { label: 'Candidates', value: totalCandidates, color: 'text-blue-600' },
                     ].map(s => (
                         <div key={s.label} className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-                            <p className="text-xs font-medium text-gray-500 mb-1">{s.label}</p>
+                            <p className="text-xs font-medium text-gray-700 mb-1">{s.label}</p>
                             <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
                         </div>
                     ))}
                 </div>
 
-                {/* Candidates table */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                        <h2 className="text-lg font-semibold text-gray-900">Registered Candidates</h2>
-                        <button onClick={fetchData} disabled={loading} className="text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50">
-                            {loading ? 'Refreshingâ€¦' : 'â†» Refresh'}
+                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white flex-wrap gap-4">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                            <h2 className="text-lg font-semibold text-gray-900">Registered Candidates ({totalCandidates})</h2>
+                            <div className="flex items-center gap-2">
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search candidates..."
+                                        value={search}
+                                        onChange={(e) => { setSearch(e.target.value); setOffset(0); }}
+                                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
+                                    />
+                                </div>
+                                <select
+                                    value={`${sortBy}:${order}`}
+                                    onChange={(e) => {
+                                        const [s, o] = e.target.value.split(':');
+                                        setSortBy(s);
+                                        setOrder(o);
+                                        setOffset(0);
+                                    }}
+                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="created_at:desc">Newest First</option>
+                                    <option value="match_score:desc">Match Score (High → Low)</option>
+                                    <option value="match_score:asc">Match Score (Low → High)</option>
+                                    <option value="username:asc">Name (A-Z)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onClick={fetchCandidates} disabled={candidatesLoading} className="text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 flex items-center gap-1">
+                            {candidatesLoading ? (
+                                <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Refreshing...</>
+                            ) : 'Refresh'}
                         </button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                            <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-700">
                                 <tr>
                                     <th className="px-6 py-3 text-left">Name</th>
                                     <th className="px-6 py-3 text-left">Email</th>
+                                    <th className="px-6 py-3 text-left">Resume Status</th>
+                                    <th className="px-6 py-3 text-left">Match Score</th>
                                     <th className="px-6 py-3 text-left">Interview Status</th>
-                                    <th className="px-6 py-3 text-left">Score</th>
+                                    <th className="px-6 py-3 text-left">Interview Score</th>
+                                    <th className="px-6 py-3 text-left">Hiring Signal</th>
                                     <th className="px-6 py-3 text-left">Scheduled At</th>
                                     <th className="px-6 py-3 text-left">Login</th>
                                     <th className="px-6 py-3 text-right">Actions</th>
@@ -391,7 +526,7 @@ export default function AdminDashboardPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {candidates.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="px-6 py-10 text-center text-gray-400">No candidates found.</td>
+                                        <td colSpan={7} className="px-6 py-10 text-center text-gray-600 font-medium">No candidates found.</td>
                                     </tr>
                                 ) : (
                                     candidates.map(candidate => {
@@ -404,7 +539,9 @@ export default function AdminDashboardPage() {
                                         return (
                                             <tr key={candidate.id} className="hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{candidate.username}</td>
-                                                <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{candidate.email}</td>
+                                                <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{candidate.email}</td>
+                                                <td className="px-6 py-4"><ResumeStatusBadge status={candidate.parse_status} /></td>
+                                                <td className="px-6 py-4"><MatchScoreBadge score={candidate.match_score} /></td>
                                                 <td className="px-6 py-4"><InterviewStatusBadge status={ivStatus} /></td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     {s?.overall_score != null ? (
@@ -418,8 +555,15 @@ export default function AdminDashboardPage() {
                                                         <span className="text-gray-300 text-xs">-</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 text-gray-500 whitespace-nowrap">
-                                                    {s?.scheduled_at ? new Date(s.scheduled_at).toLocaleString() : 'â€”'}
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {(candidate.match_score != null && s?.overall_score != null) ? (
+                                                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">
+                                                            {(candidate.match_score * 0.6 + s.overall_score * 0.4).toFixed(1)}%
+                                                        </span>
+                                                    ) : <span className="text-gray-300 text-xs">-</span>}
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-700 whitespace-nowrap">
+                                                    {s?.scheduled_at ? new Date(s.scheduled_at).toLocaleString() : '-'}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${!candidate.login_disabled ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}>
@@ -429,11 +573,28 @@ export default function AdminDashboardPage() {
                                                 <td className="px-6 py-4 text-right whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-2">
                                                         {canSchedule && (
+                                                            <div className="relative group">
+                                                                <button
+                                                                    onClick={() => { setScheduleMode('schedule'); setScheduleTarget(candidate); }}
+                                                                    disabled={candidate.parse_status !== 'success'}
+                                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:bg-gray-400"
+                                                                >
+                                                                    Schedule
+                                                                </button>
+                                                                {candidate.parse_status !== 'success' && (
+                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-10 text-center">
+                                                                        {candidate.parse_status === 'pending' ? 'Resume still parsing' : 'Parsing failed. Reprocess first'}
+                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900"></div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {candidate.parse_status === 'failed' && (
                                                             <button
-                                                                onClick={() => { setScheduleMode('schedule'); setScheduleTarget(candidate); }}
-                                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors"
+                                                                onClick={() => handleReparseResume(candidate.id)}
+                                                                className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-md text-xs font-semibold hover:bg-orange-200 transition-colors"
                                                             >
-                                                                Schedule
+                                                                Reprocess Resume
                                                             </button>
                                                         )}
                                                         {canReschedule && (
@@ -460,6 +621,14 @@ export default function AdminDashboardPage() {
                                                                 View Results
                                                             </button>
                                                         )}
+                                                        {candidate.parse_status === 'success' && candidate.resume_json && (
+                                                            <button
+                                                                onClick={() => setPreviewTarget(candidate)}
+                                                                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold hover:bg-blue-100 transition-colors"
+                                                            >
+                                                                View Resume
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleToggleLogin(candidate.id)}
                                                             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${candidate.login_disabled ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-orange-50 text-orange-700 hover:bg-orange-100'}`}
@@ -475,6 +644,44 @@ export default function AdminDashboardPage() {
                             </tbody>
                         </table>
                     </div>
+                    {/* Pagination Controls */}
+                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <span>Show</span>
+                            <select
+                                value={limit}
+                                onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0); }}
+                                className="border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                                <option value={5}>5</option>
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={50}>50</option>
+                            </select>
+                            <span>entries per page</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                            <span className="text-gray-600">
+                                Showing {candidates.length > 0 ? offset + 1 : 0} to {Math.min(offset + limit, totalCandidates)} of {totalCandidates} entries
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setOffset(Math.max(0, offset - limit))}
+                                    disabled={offset === 0 || candidatesLoading}
+                                    className="px-3 py-1.5 border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:hover:bg-transparent transition-colors font-medium text-gray-700 bg-gray-100"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    onClick={() => setOffset(offset + limit)}
+                                    disabled={offset + limit >= totalCandidates || candidatesLoading}
+                                    className="px-3 py-1.5 border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:hover:bg-transparent transition-colors font-medium text-gray-700 bg-gray-100"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
 
@@ -489,6 +696,14 @@ export default function AdminDashboardPage() {
                     onClose={() => setScheduleTarget(null)}
                     onSuccess={onScheduleSuccess}
                     onAuthError={handleAuthError}
+                />
+            )}
+
+            {/* Resume Preview Modal */}
+            {previewTarget && (
+                <ResumePreviewModal
+                    candidate={previewTarget}
+                    onClose={() => setPreviewTarget(null)}
                 />
             )}
 
@@ -528,7 +743,7 @@ export default function AdminDashboardPage() {
                                     <input
                                         type={type} value={value} onChange={e => setter(e.target.value)}
                                         placeholder={placeholder} required disabled={registerLoading}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
                             ))}
@@ -536,8 +751,8 @@ export default function AdminDashboardPage() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
                                 <textarea
                                     value={jobDescription} onChange={e => setJobDescription(e.target.value)}
-                                    rows={3} placeholder="Paste Job Description hereâ€¦" required disabled={registerLoading}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    rows={3} placeholder="Paste Job Description here..." required disabled={registerLoading}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
@@ -552,7 +767,7 @@ export default function AdminDashboardPage() {
                                 <button type="button" onClick={() => setShowRegisterModal(false)} disabled={registerLoading} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50">Cancel</button>
                                 <button type="submit" disabled={registerLoading} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                                     {registerLoading ? (
-                                        <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Registeringâ€¦</>
+                                        <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Registering...</>
                                     ) : 'Register Candidate'}
                                 </button>
                             </div>

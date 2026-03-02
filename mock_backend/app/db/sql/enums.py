@@ -9,3 +9,4 @@ class InterviewStatus(str, enum.Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+    PENDING_REVIEW = "pending_review"

@@ -21,6 +21,7 @@ from app.schemas.interview import (
     RescheduleInterviewResponse,
     CancelInterviewRequest,
     CancelInterviewResponse,
+    ApplyTemplateRequest,
 )
 from app.services.interview_admin_sql_service import InterviewAdminSQLService
 from app.db.sql.enums import InterviewStatus
@@ -36,17 +37,6 @@ def validate_uuid(id_str: str) -> uuid.UUID:
             detail=f"Invalid UUID: {id_str}",
         )
 
-@router.get(
-    "/templates",
-    summary="List active interview templates",
-    description="Admin-only. Returns all interview templates with is_active=True.",
-)
-async def list_templates(
-    current_admin: User = Depends(get_current_admin),
-    session: AsyncSession = Depends(get_db_session),
-):
-    return await InterviewAdminSQLService.list_active_templates(session)
-
 
 @router.get(
     "/summary",
@@ -57,11 +47,14 @@ async def list_templates(
     ),
 )
 async def get_interview_summary(
+    limit: int = 10,
+    offset: int = 0,
+    search: str = "",
     current_admin: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_db_session),
 ):
-    summary = await InterviewAdminSQLService.get_interview_summary(session)
-    return [
+    result = await InterviewAdminSQLService.get_interview_summary(session, limit, offset, search)
+    data = [
         {
             "interview_id": str(s["interview_id"]),
             "candidate_id": str(s["candidate_id"]) if s["candidate_id"] else None,
@@ -69,8 +62,14 @@ async def get_interview_summary(
             "scheduled_at": s["scheduled_at"],
             "overall_score": s.get("overall_score"),
         }
-        for s in summary
+        for s in result["data"]
     ]
+    return {
+        "data": data,
+        "total": result["total"],
+        "limit": limit,
+        "offset": offset
+    }
 
 
 @router.post(
@@ -170,4 +169,32 @@ async def cancel_interview(
         "status": interview.status.value if isinstance(interview.status, InterviewStatus) else interview.status,
         "cancelled_at": interview.cancelled_at,
         "reason": interview.cancellation_reason,
+    }
+
+@router.post(
+    "/{interview_id}/apply-template",
+    status_code=status.HTTP_200_OK,
+    summary="Persist a template snapshot for an interview",
+    description="Admin-only. Saves a immutable copy of questions to the interview session.",
+)
+async def apply_template(
+    interview_id: str,
+    request: ApplyTemplateRequest,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    validated_id = validate_uuid(interview_id)
+    # Convert Pydantic models to dicts for the service
+    questions_data = [q.model_dump() for q in request.questions]
+    
+    saved_questions = await InterviewAdminSQLService.apply_template_to_interview(
+        session=session,
+        interview_id=validated_id,
+        questions=questions_data
+    )
+    
+    return {
+        "interview_id": interview_id,
+        "questions_count": len(saved_questions),
+        "status": "applied"
     }

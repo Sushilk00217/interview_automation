@@ -190,7 +190,7 @@ def run_tests():
     step_print("Schedule Interview", "POST /api/v1/admin/interviews/schedule", assign_req, resp_assign.status_code, assign_json, f"status={db_i_status}", assign_status, "Transaction Integrity")
 
     resp_sum = requests.get(f"{BASE_URL}/api/v1/admin/interviews/summary", headers=headers)
-    sum_status = "PASS" if resp_sum.status_code == 200 and any(i["interview_id"] == interview_id for i in resp_sum.json()) else "FAIL"
+    sum_status = "PASS" if resp_sum.status_code == 200 and any(i["interview_id"] == interview_id for i in resp_sum.json().get("data", [])) else "FAIL"
     step_print("Get Interview Summary", "GET /api/v1/admin/interviews/summary", {}, resp_sum.status_code, "List of interviews", f"Includes {interview_id}", sum_status, "Transaction Integrity")
 
     if not interview_id:

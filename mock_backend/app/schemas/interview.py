@@ -22,6 +22,16 @@ class CancelInterviewRequest(BaseModel):
     reason: Optional[str] = Field(None, description="Optional cancellation reason for audit")
 
 
+class InterviewQuestionSnapshot(BaseModel):
+    question_id: Optional[str] = None
+    question_text: str
+    order: int
+    time_limit_sec: int
+
+class ApplyTemplateRequest(BaseModel):
+    questions: List[InterviewQuestionSnapshot]
+
+
 # ─── Response Schemas ─────────────────────────────────────────────────────────
 
 class CuratedQuestionItem(BaseModel):

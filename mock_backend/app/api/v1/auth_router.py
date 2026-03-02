@@ -1,15 +1,17 @@
+import os
 import logging
 import uuid
 from datetime import timedelta, datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, Depends, Form, UploadFile, File
+from fastapi import APIRouter, HTTPException, status, Depends, Form, UploadFile, File, BackgroundTasks
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.schemas.auth import TokenResponse, LoginRequest, CandidateResponse, AdminRegistrationRequest, AdminResponse
+from app.schemas.auth import TokenResponse, LoginRequest, CandidateResponse, AdminRegistrationRequest, AdminResponse, PaginatedCandidateResponse
 from app.db.sql.session import get_db_session
 from app.db.sql.unit_of_work import UnitOfWork
 from app.db.sql.models.user import User, CandidateProfile, AdminProfile
@@ -18,6 +20,7 @@ from app.core.security import verify_password, create_access_token, get_password
 from app.core.config import settings
 from app.services.email_service import email_service
 from app.services.admin_auth_service import AdminAuthSQLService
+from app.services.resume_tasks import parse_candidate_resume
 
 logger = logging.getLogger(__name__)
 CANDIDATE_MATERIALS_COLLECTION = "candidate_materials"
@@ -197,6 +200,7 @@ async def admin_register_candidate(
     candidate_email: str = Form(...),
     job_description: str = Form(""),
     resume: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
     current_admin: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_db_session)
 ):
@@ -217,7 +221,10 @@ async def admin_register_candidate(
         import shutil
         from app.services.resume_parser import extract_text_from_pdf
         
-        upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads", "resumes")
+        from app.services.resume_parser import extract_text_from_pdf
+        
+        upload_rel_dir = os.path.join("uploads", "resumes")
+        upload_dir = os.path.join(settings.BASE_DIR, upload_rel_dir)
         os.makedirs(upload_dir, exist_ok=True)
         
         # Read resume content
@@ -260,13 +267,19 @@ async def admin_register_candidate(
             resume_id=resume_id,
             skills=[],
             job_description=job_description,  # Store JD in profile
-            resume_text=resume_text or ""  # Store parsed resume text
+            resume_text=resume_text or "",  # Store parsed resume text
+            resume_filename=resume.filename,
+            resume_path=os.path.join(upload_rel_dir, f"{resume_id}.pdf"),
+            parse_status="pending"
         )
         new_user.candidate_profile = profile
         
         uow.users.create_user(new_user)
         # Flush to get the ID for response
         await uow.flush()
+        
+        if background_tasks:
+            background_tasks.add_task(parse_candidate_resume, new_user.id)
         
         # Print credentials to terminal
         print("\n" + "="*70)
@@ -293,21 +306,69 @@ async def admin_register_candidate(
             job_description=job_description 
         )
 
-@router.get("/admin/candidates", response_model=List[CandidateResponse])
+@router.get("/admin/candidates", response_model=PaginatedCandidateResponse)
 async def get_all_candidates(
+    limit: int = 10,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    order: str = "desc",
     current_admin: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_db_session)
 ):
     try:
         from sqlalchemy.orm import selectinload
+        from sqlalchemy import func, or_, nulls_last
+        from app.db.sql.models.user import CandidateProfile
         
         async with UnitOfWork(session) as uow:
+            # Base query
+            query = select(User).where(User.role == UserRole.CANDIDATE)
+            
+            # Apply search
+            if search:
+                search_term = f"%{search}%"
+                query = query.outerjoin(User.candidate_profile).where(
+                    or_(
+                        User.username.ilike(search_term),
+                        User.email.ilike(search_term),
+                        CandidateProfile.first_name.ilike(search_term),
+                        CandidateProfile.last_name.ilike(search_term),
+                    )
+                )
+
+            # Apply sorting
+            sort_field = User.created_at
+            if sort_by == "match_score":
+                query = query.outerjoin(User.candidate_profile)
+                sort_field = CandidateProfile.match_score
+            elif sort_by == "username":
+                sort_field = User.username
+
+            if order == "desc":
+                query = query.order_by(nulls_last(sort_field.desc()))
+            else:
+                query = query.order_by(nulls_last(sort_field.asc()))
+
             # Eagerly load candidate_profile to avoid lazy loading issues
-            stmt = select(User).where(User.role == UserRole.CANDIDATE).options(
-                selectinload(User.candidate_profile)
-            )
+            stmt = query.options(selectinload(User.candidate_profile)).offset(offset).limit(limit)
             result = await session.execute(stmt)
             users = result.scalars().all()
+            
+            # Count total
+            count_stmt = select(func.count(User.id)).where(User.role == UserRole.CANDIDATE)
+            if search:
+                count_stmt = count_stmt.outerjoin(User.candidate_profile).where(
+                    or_(
+                        User.username.ilike(search_term),
+                        User.email.ilike(search_term),
+                        CandidateProfile.first_name.ilike(search_term),
+                        CandidateProfile.last_name.ilike(search_term),
+                    )
+                )
+            
+            total_result = await session.execute(count_stmt)
+            total = total_result.scalar() or 0
             
             candidates = []
             for u in users:
@@ -322,10 +383,21 @@ async def get_all_candidates(
                     is_active=u.is_active,
                     login_disabled=u.login_disabled,
                     created_at=u.created_at,
-                    job_description=job_desc or ""
+                    job_description=job_desc or "",
+                    parse_status=u.candidate_profile.parse_status if u.candidate_profile else None,
+                    parsed_at=u.candidate_profile.parsed_at if u.candidate_profile else None,
+                    resume_json=u.candidate_profile.resume_json if u.candidate_profile else None,
+                    jd_json=u.candidate_profile.jd_json if u.candidate_profile else None,
+                    match_score=u.candidate_profile.match_score if u.candidate_profile else None
                 )
                 candidates.append(c)
-            return candidates
+                
+            return {
+                "data": candidates,
+                "total": total,
+                "limit": limit,
+                "offset": offset
+            }
     except HTTPException:
         raise
     except Exception as e:
@@ -362,3 +434,73 @@ async def toggle_candidate_login(
             "email": user.email,
             "login_disabled": new_status
         }
+
+@router.post("/admin/candidates/{user_id}/reparse-resume", status_code=status.HTTP_202_ACCEPTED)
+async def reparse_resume(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_db_session)
+):
+    valid_id = validate_uuid(user_id)
+    
+    async with UnitOfWork(session) as uow:
+        user = await uow.users.get_by_id(valid_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+            
+        if not user.candidate_profile:
+            raise HTTPException(status_code=400, detail="Candidate profile not found")
+            
+        user.candidate_profile.parse_status = "pending"
+        user.candidate_profile.updated_at = datetime.now(timezone.utc)
+        
+        await session.commit()
+        
+        background_tasks.add_task(parse_candidate_resume, user.id)
+        
+        return {"message": "Reparsing background task initiated", "user_id": str(user.id)}
+
+@router.get("/admin/candidates/{user_id}/resume-file")
+async def get_candidate_resume_file(
+    user_id: str,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_db_session)
+):
+    valid_id = validate_uuid(user_id)
+    
+    async with UnitOfWork(session) as uow:
+        user = await uow.users.get_by_id(valid_id)
+        if not user or not user.candidate_profile:
+            raise HTTPException(status_code=404, detail="Candidate or profile not found")
+            
+        profile = user.candidate_profile
+        if not profile.resume_path:
+            raise HTTPException(status_code=404, detail="Resume path not recorded")
+            
+        # Securely resolve path using BASE_DIR
+        # Use normpath to resolve any '..' and join with BASE_DIR
+        abs_resume_path = os.path.normpath(os.path.join(settings.BASE_DIR, profile.resume_path))
+        
+        # Security check: ensure the resolved path starts with the BASE_DIR
+        if not abs_resume_path.startswith(os.path.abspath(settings.BASE_DIR)):
+            logger.error(f"Potential directory traversal attempt for user {user_id} path {profile.resume_path}")
+            raise HTTPException(status_code=400, detail="Invalid file path")
+            
+        if not os.path.exists(abs_resume_path):
+            logger.error(f"Resume file missing at {abs_resume_path} for user {user_id}")
+            raise HTTPException(status_code=404, detail="Resume file not found on server")
+            
+        filename = profile.resume_filename or f"resume_{user_id}.pdf"
+        media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
+        
+        headers = {}
+        if media_type == "application/pdf":
+            headers["Content-Disposition"] = "inline"
+        
+        return FileResponse(
+            path=abs_resume_path,
+            filename=filename,
+            media_type=media_type,
+            headers=headers
+        )

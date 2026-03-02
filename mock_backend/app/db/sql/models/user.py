@@ -17,7 +17,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     login_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     last_login: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -50,6 +50,15 @@ class CandidateProfile(Base):
     skills: Mapped[list] = mapped_column(JSON, default=list)
     job_description: Mapped[str] = mapped_column(String, nullable=True)  # Store JD text
     resume_text: Mapped[str] = mapped_column(String, nullable=True)  # Store parsed resume text for question generation
+    
+    # Parsing Architecture Fields
+    resume_filename: Mapped[str] = mapped_column(String, nullable=True)
+    resume_path: Mapped[str] = mapped_column(String, nullable=True)
+    resume_json: Mapped[dict] = mapped_column(JSON, nullable=True)
+    jd_json: Mapped[dict] = mapped_column(JSON, nullable=True)
+    match_score: Mapped[float] = mapped_column(nullable=True)
+    parse_status: Mapped[str] = mapped_column(String, default="pending")
+    parsed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # Verification fields
     face_verified: Mapped[bool] = mapped_column(Boolean, default=False)

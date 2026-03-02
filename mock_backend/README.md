@@ -1,8 +1,30 @@
 # AI Interview Automation - Mock Backend
 
-Standalone backend for the AI Interview Automation platform, powered by FastAPI and PostgreSQL.
+Standalone backend for the AI Interview Automation platform, powered by FastAPI, PostgreSQL, and Azure AI Services.
 
-## 🚀 Setup & Installation
+---
+
+## 🚀 Features
+
+### 1. Advanced Question Generation
+- **Azure OpenAI Integration**: Uses GPT-4o to generate personalized conversational questions.
+- **Context-Aware**: Analyses candidate resumes (PDF) and Job Descriptions to tailor questions.
+- **Difficulty Scaling**: Automatically progresses from Medium (overview/tech) to Hard (architecture/problem-solving).
+- **Project Focus**: Specifically targets projects listed in the candidate's profile.
+
+### 2. Multi-Modal Identity Verification
+- **Face Verification**: Azure Face API integration for photo-based identity checks.
+- **Voice Enrollment**: Azure Speech Service for speaker verification.
+- **Interview Gatekeeper**: Prevents starting interviews until verification is complete.
+- **Mock Mode**: Falls back to automatic verification if Azure credentials are not configured.
+
+### 3. Interview Lifecycle Management
+- **72-Hour Expiration**: Interviews automatically expire 72 hours after the scheduled time.
+- **Real-time Status**: Tracks candidate progress and verification status.
+
+---
+
+## 🛠️ Setup & Installation
 
 ### 1️⃣ Prerequisites
 - Python 3.10+
@@ -10,8 +32,6 @@ Standalone backend for the AI Interview Automation platform, powered by FastAPI 
 - Git
 
 ### 2️⃣ Clone & Workspace Setup
-
-Clone the repository and spin up a new virtual Python environment:
 ```bash
 git clone <your-repo-url>
 cd mock_backend
@@ -30,71 +50,77 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4️⃣ Setup PostgreSQL
+### 4️⃣ Database Configuration (PostgreSQL)
 
 **1. Create the Database**
-Open `psql` using `psql -U postgres` and run:
 ```sql
-CREATE DATABASE interview_db;
-\q
+CREATE DATABASE interview_test_db;
 ```
 
 **2. Configure Environment Variables**
 Create a `.env` file in the project root:
 ```env
-DATABASE_URL=postgresql+asyncpg://postgres:YourPassword@localhost:5432/interview_db
+DATABASE_URL=postgresql+asyncpg://postgres:YourPassword@localhost:5432/interview_test_db
 SECRET_KEY=your_secret_key_here
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-```
-> [!CAUTION] 
-> If your database password contains an `@` symbol, you must URL-encode it as `%40`. Example: `password@123` → `password%40123`.
 
-**3. Run Database Migrations**
-Initialize the relational schema using Alembic:
+# Azure OpenAI
+AZURE_OPENAI_ENDPOINT=...
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
+
+# Azure Verification
+AZURE_FACE_ENDPOINT=...
+AZURE_FACE_API_KEY=...
+AZURE_SPEECH_API_KEY=...
+AZURE_SPEECH_REGION=eastus
+```
+> [!IMPORTANT]
+> If your password contains `@`, encode it as `%40` (e.g., `pass%40123`).
+
+**3. Initialize Database**
 ```bash
+# Run migrations
 alembic upgrade head
+
+# Seed initial data (Admin, Templates, Question Bank)
+python -m seeds.run_seeds
 ```
 
-**4. Seed Initial Data**
-Populate the database with a default Admin and Interview template:
-```bash
-python seed_db.py
-```
+---
 
 ## ⚡ Running the App
 
-Start the Uvicorn development server:
+Start the development server:
 ```bash
 uvicorn app.main:app --reload
 ```
-- **API Server:** `http://127.0.0.1:8000`
-- **Swagger Documentation:** `http://127.0.0.1:8000/docs`
+- **API Server**: `http://127.0.0.1:8000`
+- **Swagger Docs**: `http://127.0.0.1:8000/docs`
 
-## 🧪 Troubleshooting
-
-**Error: 500 on Schedule**
-- Ensure `curated_questions` is being returned in the response schema.
-- Confirm all Alembic migrations are applied.
-- Confirm you ran `seed_db.py`.
-
-**Error: invalid interpolation syntax (%40)**
-In `alembic/env.py`, ensure the following is configured:
-```python
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.DATABASE_URL.replace("%", "%%")
-)
-```
+---
 
 ## 🏗️ Project Structure
 
-- `app/`: Main application code
-  - `api/`: FastAPI route definitions
-  - `core/`: Security, configurations, and core logic
-  - `db/`: Database connection, models, and repositories (UnitOfWork)
-  - `schemas/`: Pydantic validation models
-  - `services/`: Decoupled business logic
-- `alembic/`: Database migration scripts
-- `tests/`: Integration and Jupyter notebook tests
-- `requirements.txt`: Python package dependencies
+- `app/`: Application core
+  - `api/`: Route definitions (Auth, Interviews, Verification)
+  - `services/`: Business logic (OpenAI, Resume Parsing, ID Verification)
+  - `db/sql/`: Models and repositories
+- `seeds/`: Idempotent data seeding logic
+- `alembic/`: Database migrations
+- `uploads/`: Local storage for Resumes and Media samples
+- `tests/`: Integration and diagnostic tests
+
+---
+
+## 🧪 Troubleshooting
+
+**Error: 500 on Interview Scheduling**
+- Verify `curated_questions` exists in response.
+- Ensure all migrations are applied (`alembic upgrade head`).
+- Confirm seeding was performed (`python -m seeds.run_seeds`).
+
+**Error: Database Connection Failed**
+- Check if PostgreSQL is running locally.
+- Verify the connection string in `.env`.
+- Ensure the database name matches what you created in psql.
