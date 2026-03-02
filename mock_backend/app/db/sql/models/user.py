@@ -51,6 +51,14 @@ class CandidateProfile(Base):
     job_description: Mapped[str] = mapped_column(String, nullable=True)  # Store JD text
     resume_text: Mapped[str] = mapped_column(String, nullable=True)  # Store parsed resume text for question generation
     
+    # Parsing Architecture Fields
+    resume_filename: Mapped[str] = mapped_column(String, nullable=True)
+    resume_path: Mapped[str] = mapped_column(String, nullable=True)
+    resume_json: Mapped[dict] = mapped_column(JSON, nullable=True)
+    jd_json: Mapped[dict] = mapped_column(JSON, nullable=True)
+    parse_status: Mapped[str] = mapped_column(String, default="pending")
+    parsed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    
     # Verification fields
     face_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     voice_verified: Mapped[bool] = mapped_column(Boolean, default=False)

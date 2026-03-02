@@ -27,6 +27,8 @@ class QuestionGeneratorService:
         resume_id: Optional[str] = None,
         resume_text: Optional[str] = None,
         job_description: Optional[str] = None,
+        resume_json: Optional[Dict[str, Any]] = None,
+        jd_json: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """
         Generate curated questions based on resume and JD using Azure OpenAI.
@@ -37,13 +39,19 @@ class QuestionGeneratorService:
             resume_id: Resume identifier (used as fallback to find resume file)
             resume_text: Parsed resume text from database (preferred)
             job_description: Job description text
+            resume_json: Pre-parsed structured resume data
+            jd_json: Pre-parsed structured job description data
             
         Returns:
             dict conforming to CuratedQuestionsPayload schema
         """
         try:
-            # Use stored resume_text if available, otherwise parse from file
-            if resume_text:
+            # Use provided structured data if available
+            if resume_json:
+                resume_data = resume_json
+                if resume_text and 'text' not in resume_data:
+                    resume_data['text'] = resume_text
+            elif resume_text:
                 # Use stored resume text directly
                 resume_data = {
                     'text': resume_text,
@@ -63,7 +71,10 @@ class QuestionGeneratorService:
                 resume_data = QuestionGeneratorService._parse_resume(resume_id)
             
             # Parse job description
-            jd_data = resume_jd_parser.parse_job_description(job_description or "")
+            if jd_json:
+                jd_data = jd_json
+            else:
+                jd_data = resume_jd_parser.parse_job_description(job_description or "")
             
             # Generate questions using Azure OpenAI
             questions = azure_openai_service.generate_conversational_questions(

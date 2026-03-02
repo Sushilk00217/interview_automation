@@ -14,6 +14,7 @@ import {
 import { CandidateResponse } from '@/types/api';
 import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
+import ResumePreviewModal from '@/components/admin/ResumePreviewModal';
 import { Toast, useToast } from '@/components/ui/Toast';
 
 // --- Types ----------------------------------------------------------------------
@@ -56,6 +57,29 @@ function InterviewStatusBadge({ status }: { status: string }) {
     );
 }
 
+const RESUME_STATUS_STYLES: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    success: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
+    none: 'bg-gray-100 text-gray-500',
+};
+
+const RESUME_STATUS_LABELS: Record<string, string> = {
+    pending: 'Parsing',
+    success: 'Parsed',
+    failed: 'Failed',
+    none: 'Not Started',
+};
+
+function ResumeStatusBadge({ status }: { status?: string | null }) {
+    const key = status && status in RESUME_STATUS_STYLES ? status : 'none';
+    return (
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${RESUME_STATUS_STYLES[key]}`}>
+            {RESUME_STATUS_LABELS[key]}
+        </span>
+    );
+}
+
 // --- Main page ------------------------------------------------------------------
 
 export default function AdminDashboardPage() {
@@ -91,6 +115,7 @@ export default function AdminDashboardPage() {
     // -- Cancel ------------------------------------------------------------------
     const [cancelTarget, setCancelTarget] = useState<CandidateRow | null>(null);
     const [summaryTarget, setSummaryTarget] = useState<CandidateRow | null>(null);
+    const [previewTarget, setPreviewTarget] = useState<CandidateRow | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
 
     // --- Auth guard -------------------------------------------------------------
@@ -204,6 +229,16 @@ export default function AdminDashboardPage() {
             toast.success(response.login_disabled ? 'Login disabled.' : 'Login enabled.');
         } catch (err: any) {
             toast.error(err.message || 'Failed to toggle login status.');
+        }
+    };
+
+    const handleReparseResume = async (candidateId: string) => {
+        try {
+            await dashboardService.reparseResume(candidateId);
+            toast.success('Reparsing started...');
+            fetchCandidates();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to trigger reparsing.');
         }
     };
 
@@ -429,7 +464,7 @@ export default function AdminDashboardPage() {
                                     placeholder="Search candidates..."
                                     value={search}
                                     onChange={(e) => { setSearch(e.target.value); setOffset(0); }}
-                                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
+                                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
                                 />
                             </div>
                         </div>
@@ -445,6 +480,7 @@ export default function AdminDashboardPage() {
                                 <tr>
                                     <th className="px-6 py-3 text-left">Name</th>
                                     <th className="px-6 py-3 text-left">Email</th>
+                                    <th className="px-6 py-3 text-left">Resume Status</th>
                                     <th className="px-6 py-3 text-left">Interview Status</th>
                                     <th className="px-6 py-3 text-left">Score</th>
                                     <th className="px-6 py-3 text-left">Scheduled At</th>
@@ -469,6 +505,7 @@ export default function AdminDashboardPage() {
                                             <tr key={candidate.id} className="hover:bg-gray-50 transition-colors">
                                                 <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{candidate.username}</td>
                                                 <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{candidate.email}</td>
+                                                <td className="px-6 py-4"><ResumeStatusBadge status={candidate.parse_status} /></td>
                                                 <td className="px-6 py-4"><InterviewStatusBadge status={ivStatus} /></td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     {s?.overall_score != null ? (
@@ -493,11 +530,28 @@ export default function AdminDashboardPage() {
                                                 <td className="px-6 py-4 text-right whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-2">
                                                         {canSchedule && (
+                                                            <div className="relative group">
+                                                                <button
+                                                                    onClick={() => { setScheduleMode('schedule'); setScheduleTarget(candidate); }}
+                                                                    disabled={candidate.parse_status !== 'success'}
+                                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:bg-gray-400"
+                                                                >
+                                                                    Schedule
+                                                                </button>
+                                                                {candidate.parse_status !== 'success' && (
+                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-lg z-10 text-center">
+                                                                        {candidate.parse_status === 'pending' ? 'Resume still parsing' : 'Parsing failed. Reprocess first'}
+                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900"></div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {candidate.parse_status === 'failed' && (
                                                             <button
-                                                                onClick={() => { setScheduleMode('schedule'); setScheduleTarget(candidate); }}
-                                                                className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors"
+                                                                onClick={() => handleReparseResume(candidate.id)}
+                                                                className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-md text-xs font-semibold hover:bg-orange-200 transition-colors"
                                                             >
-                                                                Schedule
+                                                                Reprocess Resume
                                                             </button>
                                                         )}
                                                         {canReschedule && (
@@ -522,6 +576,14 @@ export default function AdminDashboardPage() {
                                                                 className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold hover:bg-purple-100 transition-colors"
                                                             >
                                                                 View Results
+                                                            </button>
+                                                        )}
+                                                        {candidate.parse_status === 'success' && candidate.resume_json && (
+                                                            <button
+                                                                onClick={() => setPreviewTarget(candidate)}
+                                                                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold hover:bg-blue-100 transition-colors"
+                                                            >
+                                                                View Resume
                                                             </button>
                                                         )}
                                                         <button
@@ -594,6 +656,14 @@ export default function AdminDashboardPage() {
                 />
             )}
 
+            {/* Resume Preview Modal */}
+            {previewTarget && (
+                <ResumePreviewModal
+                    candidate={previewTarget}
+                    onClose={() => setPreviewTarget(null)}
+                />
+            )}
+
             {/* Cancel Dialog */}
             {cancelTarget && (
                 <CancelInterviewDialog
@@ -630,7 +700,7 @@ export default function AdminDashboardPage() {
                                     <input
                                         type={type} value={value} onChange={e => setter(e.target.value)}
                                         placeholder={placeholder} required disabled={registerLoading}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
                             ))}
@@ -639,7 +709,7 @@ export default function AdminDashboardPage() {
                                 <textarea
                                     value={jobDescription} onChange={e => setJobDescription(e.target.value)}
                                     rows={3} placeholder="Paste Job Description here..." required disabled={registerLoading}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>

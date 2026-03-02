@@ -30,5 +30,8 @@ export const dashboardService = {
             `/api/v1/auth/admin/candidates/${candidateId}/toggle-login`,
             {}
         );
+    },
+    reparseResume: async (candidateId: string): Promise<any> => {
+        return apiClient.post(`/api/v1/auth/admin/candidates/${candidateId}/reparse-resume`, {});
     }
 };
