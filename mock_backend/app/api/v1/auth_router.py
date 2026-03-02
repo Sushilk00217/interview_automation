@@ -1,6 +1,7 @@
+import logging
 import uuid
 from datetime import timedelta, datetime, timezone
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Form, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -18,6 +19,8 @@ from app.core.config import settings
 from app.services.email_service import email_service
 from app.services.admin_auth_service import AdminAuthSQLService
 
+logger = logging.getLogger(__name__)
+CANDIDATE_MATERIALS_COLLECTION = "candidate_materials"
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -90,69 +93,87 @@ async def register_admin(request: AdminRegistrationRequest, session: AsyncSessio
 
 @router.post("/login/admin", response_model=TokenResponse)
 async def login_admin(request: LoginRequest, session: AsyncSession = Depends(get_db_session)):
-    async with UnitOfWork(session) as uow:
-        user = await uow.users.get_by_username(request.username)
+    try:
+        async with UnitOfWork(session) as uow:
+            user = await uow.users.get_by_username(request.username)
+            
+            if not user or not verify_password(request.password, user.hashed_password):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Incorrect admin credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            if user.role != UserRole.ADMIN:
+                 raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User is not an admin",
+                )
         
-        if not user or not verify_password(request.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect admin credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        if user.role != UserRole.ADMIN:
-             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User is not an admin",
-            )
-    
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             subject=str(user.id), expires_delta=access_token_expires
         )
-    
+        
         return {
             "access_token": access_token,
             "token_type": "bearer",
             "username": user.username,
             "role": user.role.value
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in login_admin: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 @router.post("/login/candidate", response_model=TokenResponse)
 async def login_candidate(request: LoginRequest, session: AsyncSession = Depends(get_db_session)):
-    async with UnitOfWork(session) as uow:
-        user = await uow.users.get_by_username(request.username)
-        
-        if not user or not verify_password(request.password, user.hashed_password):
-             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect candidate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        if user.role != UserRole.CANDIDATE:
-             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User is not a candidate",
-            )
+    try:
+        async with UnitOfWork(session) as uow:
+            user = await uow.users.get_by_username(request.username)
             
-        if user.login_disabled:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Login has been disabled for this account. Please contact the administrator."
-            )
-    
+            if not user or not verify_password(request.password, user.hashed_password):
+                 raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Incorrect candidate credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            if user.role != UserRole.CANDIDATE:
+                 raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User is not a candidate",
+                )
+                
+            if user.login_disabled:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Login has been disabled for this account. Please contact the administrator."
+                )
+        
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             subject=str(user.id), expires_delta=access_token_expires
         )
-    
+        
         return {
             "access_token": access_token,
             "token_type": "bearer",
             "username": user.username,
             "role": user.role.value
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in login_candidate: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 @router.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
@@ -174,7 +195,7 @@ async def logout():
 async def admin_register_candidate(
     candidate_name: str = Form(...),
     candidate_email: str = Form(...),
-    job_description: str = Form(...),
+    job_description: str = Form(""),
     resume: UploadFile = File(...),
     current_admin: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_db_session)
@@ -191,6 +212,37 @@ async def admin_register_candidate(
         
         resume_id = secrets.token_hex(8)
         
+        # Save resume file and extract text
+        import os
+        import shutil
+        from app.services.resume_parser import extract_text_from_pdf
+        
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads", "resumes")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Read resume content
+        resume_bytes = await resume.read()
+        if len(resume_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Resume file is empty")
+        
+        # Extract text from resume (parse before saving to get text)
+        resume_text = ""
+        try:
+            if resume.content_type and "pdf" in resume.content_type:
+                resume_text = extract_text_from_pdf(resume_bytes)
+        except Exception as e:
+            logger.warning(f"Failed to extract text from resume: {e}")
+            resume_text = ""
+        
+        # Save resume file
+        resume_path = os.path.join(upload_dir, f"{resume_id}.pdf")
+        try:
+            with open(resume_path, "wb") as buffer:
+                buffer.write(resume_bytes)
+        except Exception as e:
+            logger.error(f"Failed to save resume file: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save resume file")
+        
         names = candidate_name.split(" ", 1)
         first_name = names[0]
         last_name = names[1] if len(names) > 1 else ""
@@ -206,13 +258,28 @@ async def admin_register_candidate(
             first_name=first_name,
             last_name=last_name,
             resume_id=resume_id,
-            skills=[]
+            skills=[],
+            job_description=job_description,  # Store JD in profile
+            resume_text=resume_text or ""  # Store parsed resume text
         )
         new_user.candidate_profile = profile
         
         uow.users.create_user(new_user)
         # Flush to get the ID for response
         await uow.flush()
+        
+        # Print credentials to terminal
+        print("\n" + "="*70)
+        print(" " * 20 + "CANDIDATE REGISTRATION SUCCESSFUL")
+        print("="*70)
+        print(f" Candidate Name: {candidate_name}")
+        print(f" Email: {candidate_email}")
+        print(f" Username: {username}")
+        print(f" Password: {password}")
+        print(f" Candidate ID: {new_user.id}")
+        print("="*70)
+        print(" " * 15 + "IMPORTANT: Save these credentials!")
+        print("="*70 + "\n")
         
         await email_service.send_candidate_password_email(candidate_email, candidate_name, password)
         
@@ -231,24 +298,42 @@ async def get_all_candidates(
     current_admin: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_db_session)
 ):
-    async with UnitOfWork(session) as uow:
-        # We need a robust way to list specifically candidates
-        result = await session.execute(select(User).where(User.role == UserRole.CANDIDATE))
-        users = result.scalars().all()
+    try:
+        from sqlalchemy.orm import selectinload
         
-        candidates = []
-        for u in users:
-            c = CandidateResponse(
-                id=str(u.id),
-                username=u.username,
-                email=u.email,
-                is_active=u.is_active,
-                login_disabled=u.login_disabled,
-                created_at=u.created_at,
-                job_description="Mock JD"
+        async with UnitOfWork(session) as uow:
+            # Eagerly load candidate_profile to avoid lazy loading issues
+            stmt = select(User).where(User.role == UserRole.CANDIDATE).options(
+                selectinload(User.candidate_profile)
             )
-            candidates.append(c)
-        return candidates
+            result = await session.execute(stmt)
+            users = result.scalars().all()
+            
+            candidates = []
+            for u in users:
+                job_desc = None
+                if u.candidate_profile:
+                    job_desc = u.candidate_profile.job_description
+                
+                c = CandidateResponse(
+                    id=str(u.id),
+                    username=u.username,
+                    email=u.email,
+                    is_active=u.is_active,
+                    login_disabled=u.login_disabled,
+                    created_at=u.created_at,
+                    job_description=job_desc or ""
+                )
+                candidates.append(c)
+            return candidates
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_all_candidates: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch candidates: {str(e)}"
+        )
 
 @router.post("/admin/candidates/{candidate_id}/toggle-login")
 async def toggle_candidate_login(

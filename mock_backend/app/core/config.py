@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     # Postgres
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost/interview_db")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # LLM for question generation (OpenAI or Azure OpenAI)
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_API_BASE: str = os.getenv("OPENAI_API_BASE", "")  # e.g. Azure: https://xxx.openai.azure.com/
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # or gpt-4, etc.
 
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+ 
 settings = Settings()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useInterviewStore } from '@/store/interviewStore';
@@ -10,6 +10,14 @@ import {
     ActiveInterviewResponse,
     SchedulingApiError,
 } from '@/lib/api/interviews';
+import {
+    getVerificationStatus,
+    uploadFaceSample,
+    uploadVoiceSample,
+    uploadVideoSample,
+    VerificationStatus,
+} from '@/lib/api/verification';
+import MediaCapture from '@/components/verification/MediaCapture';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -37,6 +45,9 @@ export default function CandidatePage() {
     const [loading, setLoading] = useState(true);
     const [startLoading, setStartLoading] = useState(false);
     const [error, setError] = useState('');
+    const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+    const [verificationLoading, setVerificationLoading] = useState(true);
+    const [uploading, setUploading] = useState({ photo: false, video: false, audio: false });
 
     /** Read JWT from localStorage—same key used by authStore & API helpers. */
     const getJwt = (): string => {
@@ -53,8 +64,12 @@ export default function CandidatePage() {
         setLoading(true);
         setError('');
         try {
-            const data = await fetchActiveInterview();
-            setInterview(data);
+            const [interviewData, verificationData] = await Promise.all([
+                fetchActiveInterview(),
+                getVerificationStatus().catch(() => null),
+            ]);
+            setInterview(interviewData);
+            setVerificationStatus(verificationData);
         } catch (err: any) {
             const apiErr = err as SchedulingApiError;
             if (apiErr.status === 401 || apiErr.status === 403) {
@@ -65,8 +80,63 @@ export default function CandidatePage() {
             setError('Failed to load interview details. Please try again.');
         } finally {
             setLoading(false);
+            setVerificationLoading(false);
         }
     }, [logout, router]);
+
+    const fetchVerificationStatus = useCallback(async () => {
+        try {
+            const status = await getVerificationStatus();
+            setVerificationStatus(status);
+        } catch (err) {
+            console.error('Failed to fetch verification status:', err);
+        }
+    }, []);
+
+    const handlePhotoCapture = async (file: File) => {
+        setUploading(prev => ({ ...prev, photo: true }));
+        setError('');
+        try {
+            await uploadFaceSample(file);
+            await fetchVerificationStatus();
+            // Refresh interview data to update can_start status
+            const interviewData = await fetchActiveInterview();
+            setInterview(interviewData);
+        } catch (err: any) {
+            setError(err.message || 'Failed to upload photo');
+        } finally {
+            setUploading(prev => ({ ...prev, photo: false }));
+        }
+    };
+
+    const handleVideoCapture = async (file: File) => {
+        setUploading(prev => ({ ...prev, video: true }));
+        setError('');
+        try {
+            await uploadVideoSample(file);
+            await fetchVerificationStatus();
+        } catch (err: any) {
+            setError(err.message || 'Failed to upload video');
+        } finally {
+            setUploading(prev => ({ ...prev, video: false }));
+        }
+    };
+
+    const handleVoiceCapture = async (file: File) => {
+        setUploading(prev => ({ ...prev, audio: true }));
+        setError('');
+        try {
+            await uploadVoiceSample(file);
+            await fetchVerificationStatus();
+            // Refresh interview data to update can_start status
+            const interviewData = await fetchActiveInterview();
+            setInterview(interviewData);
+        } catch (err: any) {
+            setError(err.message || 'Failed to upload voice sample');
+        } finally {
+            setUploading(prev => ({ ...prev, audio: false }));
+        }
+    };
 
     useEffect(() => {
         if (!_hasHydrated) return;  // wait for localStorage rehydration
@@ -81,9 +151,16 @@ export default function CandidatePage() {
         fetchData();
     }, [_hasHydrated, isAuthenticated, user, router, fetchData]);
 
+
     // ─── Start / Rejoin interview ────────────────────────────────────────────
     const handleStart = async () => {
         if (!interview) return;
+        
+        // Check verification status before starting
+        if (!verificationStatus?.can_start_interview) {
+            setError('Please complete identity verification (upload photo and voice sample) before starting the interview.');
+            return;
+        }
         setStartLoading(true);
         setError('');
         try {
@@ -171,6 +248,46 @@ export default function CandidatePage() {
                     <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
                 )}
 
+                {/* Verification Section */}
+                {!verificationLoading && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100">
+                            <h2 className="text-base font-semibold text-gray-900">Identity Verification</h2>
+                            <p className="text-sm text-gray-600 mt-1">
+                                Please upload your photo and voice sample to verify your identity before starting the interview.
+                            </p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <MediaCapture
+                                type="photo"
+                                onCapture={handlePhotoCapture}
+                                isUploading={uploading.photo}
+                                isVerified={verificationStatus?.face_verified || false}
+                            />
+                            <MediaCapture
+                                type="audio"
+                                onCapture={handleVoiceCapture}
+                                isUploading={uploading.audio}
+                                isVerified={verificationStatus?.voice_verified || false}
+                            />
+                            
+                            {verificationStatus?.can_start_interview && (
+                                <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                                    </svg>
+                                    <span>All verification samples uploaded successfully. You can now start your interview.</span>
+                                </div>
+                            )}
+                            {!verificationStatus?.can_start_interview && (
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                                    Please complete identity verification (upload photo and voice sample) before starting the interview.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Interview card */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-100">
@@ -204,7 +321,7 @@ export default function CandidatePage() {
                             </div>
 
                             {/* can_start gate */}
-                            {interview.can_start ? (
+                            {interview.can_start && verificationStatus?.can_start_interview ? (
                                 <button
                                     onClick={handleStart}
                                     disabled={startLoading}
@@ -232,9 +349,20 @@ export default function CandidatePage() {
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0 mt-0.5">
                                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clipRule="evenodd" />
                                     </svg>
-                                    <span>
-                                        Your interview is scheduled for <strong>{scheduledDisplay}</strong>. The Start button will unlock at that time.
-                                    </span>
+                                    <div className="flex-1">
+                                        {interview.scheduled_at && new Date(interview.scheduled_at) > new Date() ? (
+                                            <span>
+                                                Your interview is scheduled for <strong>{scheduledDisplay}</strong>. The Start button will unlock at that time.
+                                            </span>
+                                        ) : (
+                                            <span>
+                                                {!verificationStatus?.can_start_interview 
+                                                    ? "Please complete identity verification (upload photo and voice sample) before starting the interview."
+                                                    : "Please wait for the scheduled time to start the interview."
+                                                }
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

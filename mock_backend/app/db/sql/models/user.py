@@ -48,5 +48,16 @@ class CandidateProfile(Base):
     resume_id: Mapped[str] = mapped_column(String, nullable=True)
     experience_years: Mapped[int] = mapped_column(nullable=True)
     skills: Mapped[list] = mapped_column(JSON, default=list)
+    job_description: Mapped[str] = mapped_column(String, nullable=True)  # Store JD text
+    resume_text: Mapped[str] = mapped_column(String, nullable=True)  # Store parsed resume text for question generation
+    
+    # Verification fields
+    face_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    face_sample_url: Mapped[str] = mapped_column(String, nullable=True)  # URL to stored face sample
+    video_sample_url: Mapped[str] = mapped_column(String, nullable=True)  # URL to stored video sample
+    voice_sample_url: Mapped[str] = mapped_column(String, nullable=True)  # URL to stored voice sample
+    face_verification_id: Mapped[str] = mapped_column(String, nullable=True)  # Azure Face API person ID
+    voice_profile_id: Mapped[str] = mapped_column(String, nullable=True)  # Azure Speech profile ID
 
     user: Mapped["User"] = relationship("User", back_populates="candidate_profile")

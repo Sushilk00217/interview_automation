@@ -49,3 +49,10 @@ class UserRepository(BaseRepository[User]):
         ).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+    
+    async def get_candidate_profile(self, user_id: uuid.UUID) -> Optional["CandidateProfile"]:
+        """Get candidate profile for a user."""
+        from app.db.sql.models.user import CandidateProfile
+        stmt = select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

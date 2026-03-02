@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,19 +17,40 @@ class InterviewSQLService:
             if not interview:
                 return None
 
+            # Check if interview has expired (72 hours from scheduled_at)
+            now_utc = datetime.now(timezone.utc)
+            if interview.scheduled_at:
+                expiration_time = interview.scheduled_at + timedelta(hours=72)
+                if now_utc > expiration_time:
+                    # Interview has expired, don't return it
+                    return None
+
             interview_id = interview.id
             interview_status = interview.status
 
             if interview_status == InterviewStatus.SCHEDULED:
                 scheduled_at = interview.scheduled_at
-                now_utc = datetime.now(timezone.utc)
-                can_start = scheduled_at is not None and scheduled_at <= now_utc
+                time_ready = scheduled_at is not None and scheduled_at <= now_utc
+                
+                # Check verification status
+                candidate = await uow.users.get_by_id(candidate_id)
+                verification_ready = True
+                if candidate and candidate.candidate_profile:
+                    verification_ready = (
+                        candidate.candidate_profile.face_verified and 
+                        candidate.candidate_profile.voice_verified
+                    )
+                
+                can_start = time_ready and verification_ready
+                
                 return {
                     "interview_id": str(interview_id),
                     "session_id": None,
                     "status": interview_status.value,
                     "scheduled_at": scheduled_at,
                     "can_start": can_start,
+                    "face_verified": candidate.candidate_profile.face_verified if candidate and candidate.candidate_profile else False,
+                    "voice_verified": candidate.candidate_profile.voice_verified if candidate and candidate.candidate_profile else False,
                 }
 
             if interview_status == InterviewStatus.IN_PROGRESS:
@@ -89,6 +110,20 @@ class InterviewSQLService:
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Interview cannot be started before the scheduled time"
                     )
+            
+            # Verification check: candidate must have uploaded face and voice samples
+            candidate = await uow.users.get_by_id(candidate_id)
+            if candidate and candidate.candidate_profile:
+                if not candidate.candidate_profile.face_verified or not candidate.candidate_profile.voice_verified:
+                    missing = []
+                    if not candidate.candidate_profile.face_verified:
+                        missing.append("face sample (photo)")
+                    if not candidate.candidate_profile.voice_verified:
+                        missing.append("voice sample")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Please upload and verify your {', '.join(missing)} before starting the interview"
+                    )
 
             # Transition interview to in_progress
             interview.status = InterviewStatus.IN_PROGRESS
@@ -118,6 +153,16 @@ class InterviewSQLService:
         async with UnitOfWork(session) as uow:
             interviews = await uow.interviews.list_by_candidate(candidate_id)
             
+            # Filter out interviews that have expired (72 hours from scheduled_at)
+            now_utc = datetime.now(timezone.utc)
+            valid_interviews = []
+            for i in interviews:
+                if i.scheduled_at:
+                    expiration_time = i.scheduled_at + timedelta(hours=72)
+                    if now_utc > expiration_time:
+                        continue  # Skip expired interviews
+                valid_interviews.append(i)
+            
             return [{
                 "id": str(i.id),
                 "template_id": str(i.template_id) if i.template_id else None,
@@ -126,4 +171,4 @@ class InterviewSQLService:
                 "started_at": i.started_at,
                 "completed_at": i.completed_at,
                 "overall_score": i.overall_score
-            } for i in interviews]
+            } for i in valid_interviews]

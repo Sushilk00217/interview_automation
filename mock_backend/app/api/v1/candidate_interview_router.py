@@ -4,9 +4,10 @@ Candidate Interview Router (Refactored for SQLAlchemy)
 Endpoints for candidates to view and start their assigned interviews.
 
 GET  /active               – Returns scheduled/in_progress interview for the logged-in candidate
-POST /{interview_id}/start – Creates or resumes an interview session
+POST /{interview_id}/start – Creates or resumes an interview session (generates questions from resume+JD via LLM when starting).
 """
 
+import logging
 import uuid
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +19,8 @@ from app.db.sql.models.user import User
 from app.db.sql.enums import UserRole
 from app.services.interview_sql_service import InterviewSQLService
 
+logger = logging.getLogger(__name__)
+CANDIDATE_MATERIALS_COLLECTION = "candidate_materials"
 router = APIRouter()
 
 # ─── Candidate auth guard ─────────────────────────────────────────────────────
@@ -79,4 +82,3 @@ async def start_interview(
 
     candidate_id = current_candidate.id
     return await InterviewSQLService.start_interview(session, validated_interview_id, candidate_id)
-
