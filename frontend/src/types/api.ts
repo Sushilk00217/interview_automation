@@ -25,11 +25,14 @@ export type ProctoringAction = "FLAG" | "TERMINATE" | "IGNORE";
 
 export interface QuestionResponse {
     question_id: string;
-    category: QuestionCategory;
-    answer_mode: AnswerMode;
-    difficulty: Difficulty;
-    prompt: string;
+    question_text?: string;
+    prompt?: string; // fallback
+    answer_mode: 'TEXT' | 'CODE' | 'AUDIO';
     time_limit_sec: number;
+    question_number: number;
+    total_questions: number;
+    category?: string; // Added back for UI completeness
+    difficulty?: string;
 }
 
 export interface EvaluationSubmitRequest {

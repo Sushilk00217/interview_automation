@@ -4,12 +4,14 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.db.sql.unit_of_work import UnitOfWork
 from app.db.sql.enums import InterviewStatus
 from app.db.sql.models.interview_session import InterviewSession
 from app.db.sql.models.interview import Interview
+from app.db.sql.models.interview_session_question import InterviewSessionQuestion
 
 # ── Mock score generation ──────────────────────────────────────────────────────
 _STRENGTH_POOL = [
@@ -122,8 +124,15 @@ class InterviewSessionSQLService:
                 uow, session_id, candidate_id
             )
 
-            curated = interview.curated_questions or {}
-            questions = curated.get("questions", []) if isinstance(curated, dict) else []
+            stmt = (
+                select(InterviewSessionQuestion)
+                .options(selectinload(InterviewSessionQuestion.question))
+                .where(InterviewSessionQuestion.interview_id == interview.id)
+                .order_by(InterviewSessionQuestion.order)
+            )
+            result = await session.execute(stmt)
+            questions = result.scalars().all()
+
             answered_count = session_obj.answered_count
 
             if answered_count >= len(questions):
@@ -132,17 +141,26 @@ class InterviewSessionSQLService:
                 )
 
             q = questions[answered_count]
+            
             answer_mode = "TEXT"
-            if q.get("question_type") == "coding":
-                answer_mode = "CODE"
-            elif q.get("question_type") == "conversational":
+            if q.question:
+                category_name = q.question.category.name if hasattr(q.question.category, 'name') else str(q.question.category)
+                if category_name in ["SQL", "DATA_STRUCTURES"]:
+                    answer_mode = "CODE"
+                else:
+                    answer_mode = "AUDIO"
+            elif q.custom_text:
+                # Fallback to audio for custom text unless we try to guess it's coding
                 answer_mode = "AUDIO"
 
+            prompt = q.custom_text or (q.question.text if q.question else "Please answer the following question.")
+            time_limit_sec = 300 if answer_mode == "CODE" else 120
+
             return {
-                "question_id": q.get("question_id", f"q_{answered_count}"),
-                "question_text": q.get("prompt", ""),
+                "question_id": str(q.id),
+                "question_text": prompt,
                 "answer_mode": answer_mode,
-                "time_limit_sec": q.get("time_limit_sec", 120),
+                "time_limit_sec": time_limit_sec,
                 "question_number": answered_count + 1,
                 "total_questions": len(questions),
             }
@@ -169,13 +187,13 @@ class InterviewSessionSQLService:
                 uow, session_id, candidate_id, with_for_update=True
             )
 
-            curated = interview.curated_questions or {}
-            questions = curated.get("questions", []) if isinstance(curated, dict) else []
+            stmt = select(func.count()).where(InterviewSessionQuestion.interview_id == interview.id)
+            total_questions = await session.scalar(stmt) or 0
 
             new_count = session_obj.answered_count + 1
             session_obj.answered_count = new_count
 
-            if new_count >= len(questions):
+            if new_count >= total_questions:
                 # ── All questions answered → generate mock score and complete ──
                 now = datetime.now(timezone.utc)
                 mock = _generate_mock_result(interview.id)
