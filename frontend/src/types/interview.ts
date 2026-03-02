@@ -8,10 +8,35 @@ export type InterviewStatus =
 
 export interface InterviewTemplate {
     id: string;
-    name: string;
-    description: string;
-    total_duration_sec: number;
+    title: string;
+    role_name?: string | null;
+    description?: string | null;
     is_active: boolean;
+    is_rule_based: boolean;
+    is_default_for_role: boolean;
+    created_at: string;
+    updated_at: string;
+    settings?: Record<string, any> | null;
+}
+
+export interface InterviewTemplateCreate {
+    title: string;
+    role_name?: string;
+    description?: string;
+    is_rule_based: boolean;
+    is_active?: boolean;
+    is_default_for_role?: boolean;
+    settings?: Record<string, any>;
+}
+
+export interface InterviewTemplateUpdate {
+    title?: string;
+    role_name?: string;
+    description?: string;
+    is_rule_based?: boolean;
+    is_active?: boolean;
+    is_default_for_role?: boolean;
+    settings?: Record<string, any>;
 }
 
 export interface CandidateInterview {

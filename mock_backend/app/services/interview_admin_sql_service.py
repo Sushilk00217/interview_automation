@@ -189,6 +189,7 @@ class InterviewAdminSQLService:
             {
                 "id": str(t.id),
                 "name": t.title,                                               # title → name (frontend contract)
+                "title": t.title,
                 "description": t.description,
                 "total_duration_sec": (t.settings or {}).get("total_duration_sec", 3600),
                 "is_active": t.is_active,

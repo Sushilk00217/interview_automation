@@ -1,5 +1,6 @@
 import uuid
 import datetime
+from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,6 +45,7 @@ class CandidateProfile(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     first_name: Mapped[str] = mapped_column(String, nullable=True)
     last_name: Mapped[str] = mapped_column(String, nullable=True)
+    role_name: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     phone: Mapped[str] = mapped_column(String, nullable=True)
     resume_id: Mapped[str] = mapped_column(String, nullable=True)
     experience_years: Mapped[int] = mapped_column(nullable=True)

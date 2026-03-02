@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { InterviewTemplate } from '@/types/interview';
-import { fetchInterviewTemplates, scheduleInterview, rescheduleInterview, previewTemplate } from '@/lib/api/interviews';
+import { scheduleInterview, rescheduleInterview, previewTemplate } from '@/lib/api/interviews';
+import { getTemplates } from '@/lib/api/templates';
 import { SchedulingApiError, TemplatePreviewQuestion } from '@/types/interview';
 
 type ModalMode = 'schedule' | 'reschedule';
@@ -25,14 +26,16 @@ export default function ScheduleInterviewModal({
     mode,
     candidateId,
     candidateName,
+    roleName,
     interviewId,
     existingScheduledAt,
     onClose,
     onSuccess,
     onAuthError,
-}: ScheduleInterviewModalProps) {
+}: ScheduleInterviewModalProps & { roleName?: string | null }) {
     const [templates, setTemplates] = useState<InterviewTemplate[]>([]);
     const [templateId, setTemplateId] = useState('');
+    // ... rest of the component
     // Default to current local datetime in "YYYY-MM-DDTHH:mm" format
     const nowLocal = () => {
         const d = new Date();
@@ -87,13 +90,23 @@ export default function ScheduleInterviewModal({
     useEffect(() => {
         if (mode !== 'schedule') return;
         setTemplatesLoading(true);
-        fetchInterviewTemplates()
+
+        // Fetch templates, potentially filtered by role
+        getTemplates()
             .then((data) => {
                 const active = data.filter((t) => t.is_active);
                 setTemplates(active);
-                // Only set initial template if not already set
+
+                // PART 6: Auto-select logic
                 if (active.length > 0 && !templateId) {
-                    setTemplateId(active[0].id);
+                    // 1. Try to find default for role
+                    const defaultForRole = active.find(t => t.role_name === roleName && t.is_default_for_role);
+                    if (defaultForRole) {
+                        setTemplateId(defaultForRole.id);
+                    } else {
+                        // 2. Fallback to first available
+                        setTemplateId(active[0].id);
+                    }
                 }
             })
             .catch((err: SchedulingApiError) => {
@@ -102,7 +115,7 @@ export default function ScheduleInterviewModal({
                 setTemplateId('');
             })
             .finally(() => setTemplatesLoading(false));
-    }, [mode, onAuthError, templateId]);
+    }, [mode, onAuthError, templateId, roleName]);
 
     // ─── Submit ───────────────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -216,11 +229,11 @@ export default function ScheduleInterviewModal({
                                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-50"
                                 >
                                     {templates.length === 0 && (
-                                        <option value="">No active templates available</option>
+                                        <option value="" className="text-gray-900">No active templates available</option>
                                     )}
                                     {templates.map((t) => (
-                                        <option key={t.id} value={t.id}>
-                                            {t.name}
+                                        <option key={t.id} value={t.id} className="text-gray-900">
+                                            {t.title}
                                         </option>
                                     ))}
                                 </select>

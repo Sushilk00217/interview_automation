@@ -126,6 +126,7 @@ export interface CandidateResponse {
     parsed_at?: string | null;
     resume_json?: any;
     jd_json?: any;
+    role_name?: string | null;
     match_score?: number | null;
 }
 

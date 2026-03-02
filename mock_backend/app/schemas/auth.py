@@ -32,6 +32,7 @@ class CandidateResponse(BaseModel):
     parsed_at: Optional[datetime] = None
     resume_json: Optional[dict] = None
     jd_json: Optional[dict] = None
+    role_name: Optional[str] = None
     match_score: Optional[float] = None
 
     class Config:

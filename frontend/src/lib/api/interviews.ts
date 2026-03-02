@@ -58,14 +58,6 @@ async function parseError(res: Response): Promise<SchedulingApiError> {
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
-export async function fetchInterviewTemplates(): Promise<InterviewTemplate[]> {
-    const res = await fetch(`${BASE_URL}/api/v1/admin/interviews/templates`, {
-        headers: authHeaders(),
-    });
-    if (!res.ok) throw await parseError(res);
-    return res.json();
-}
-
 export async function previewTemplate(
     templateId: string
 ): Promise<TemplatePreviewResponse> {

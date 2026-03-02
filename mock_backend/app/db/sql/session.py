@@ -30,6 +30,9 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
+# Alias for backward compatibility with existing project routers
+get_db = get_db_session
+
 async def test_database_connection():
     """
     Test the connection to the database. Exits the app if connection fails.
