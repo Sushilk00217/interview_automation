@@ -20,7 +20,7 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
             </div>
             <div className="p-6">
                 <pre className="whitespace-pre-wrap font-sans text-gray-800 text-lg leading-relaxed">
-                    {question.prompt}
+                    {question.question_text || question.prompt}
                 </pre>
             </div>
         </div>

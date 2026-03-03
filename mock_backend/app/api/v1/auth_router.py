@@ -303,7 +303,8 @@ async def admin_register_candidate(
             is_active=new_user.is_active,
             login_disabled=new_user.login_disabled,
             created_at=new_user.created_at,
-            job_description=job_description 
+            job_description=job_description,
+            role_name=profile.role_name
         )
 
 @router.get("/admin/candidates", response_model=PaginatedCandidateResponse)
@@ -384,6 +385,7 @@ async def get_all_candidates(
                     login_disabled=u.login_disabled,
                     created_at=u.created_at,
                     job_description=job_desc or "",
+                    role_name=u.candidate_profile.role_name if u.candidate_profile else None,
                     parse_status=u.candidate_profile.parse_status if u.candidate_profile else None,
                     parsed_at=u.candidate_profile.parsed_at if u.candidate_profile else None,
                     resume_json=u.candidate_profile.resume_json if u.candidate_profile else None,

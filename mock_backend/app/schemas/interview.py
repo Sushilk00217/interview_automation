@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any, Literal
 from datetime import datetime
@@ -5,11 +6,18 @@ from datetime import datetime
 
 # ─── Request Schemas ─────────────────────────────────────────────────────────
 
+class InterviewSessionQuestionCreate(BaseModel):
+    """Schema for creating a session question with optional overrides."""
+    question_id: Optional[uuid.UUID] = None
+    custom_text: Optional[str] = None
+    order: int
+
 class ScheduleInterviewRequest(BaseModel):
     """Request body for POST /admin/interviews/schedule"""
     candidate_id: str = Field(..., description="UUID of the candidate user")
     template_id: str = Field(..., description="UUID of the interview template")
     scheduled_at: datetime = Field(..., description="Future UTC datetime for the interview")
+    questions: Optional[List[InterviewSessionQuestionCreate]] = Field(None, description="Optional custom questions to override template defaults")
 
 
 class RescheduleInterviewRequest(BaseModel):
@@ -20,16 +28,6 @@ class RescheduleInterviewRequest(BaseModel):
 class CancelInterviewRequest(BaseModel):
     """Request body for PUT /admin/interviews/{id}/cancel"""
     reason: Optional[str] = Field(None, description="Optional cancellation reason for audit")
-
-
-class InterviewQuestionSnapshot(BaseModel):
-    question_id: Optional[str] = None
-    question_text: str
-    order: int
-    time_limit_sec: int
-
-class ApplyTemplateRequest(BaseModel):
-    questions: List[InterviewQuestionSnapshot]
 
 
 # ─── Response Schemas ─────────────────────────────────────────────────────────
@@ -80,6 +78,42 @@ class CuratedQuestionsPayload(BaseModel):
     questions: List[CuratedQuestionItem]
 
 
+class InterviewTemplateResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    role_name: Optional[str] = None
+    description: Optional[str] = None
+    is_rule_based: bool
+    is_active: bool
+    is_default_for_role: bool
+    settings: Optional[dict] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InterviewTemplateCreate(BaseModel):
+    title: str
+    role_name: Optional[str] = None
+    description: Optional[str] = None
+    is_rule_based: bool
+    is_active: bool = True
+    is_default_for_role: bool = False
+    settings: Optional[dict] = None
+
+
+class InterviewTemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    role_name: Optional[str] = None
+    description: Optional[str] = None
+    is_rule_based: Optional[bool] = None
+    is_active: Optional[bool] = None
+    is_default_for_role: Optional[bool] = None
+    settings: Optional[dict] = None
+
+
 class ScheduleInterviewResponse(BaseModel):
     """Response body for POST /admin/interviews/schedule"""
     id: str
@@ -95,23 +129,22 @@ class ScheduleInterviewResponse(BaseModel):
         from_attributes = True
 
 
-class RescheduleInterviewResponse(BaseModel):
-    """Response body for PUT /admin/interviews/{id}/reschedule"""
-    id: str
-    status: str
-    scheduled_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
 class CancelInterviewResponse(BaseModel):
     """Response body for PUT /admin/interviews/{id}/cancel"""
     id: str
     status: str
     cancelled_at: datetime
     reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class RescheduleInterviewResponse(BaseModel):
+    """Response body for PUT /admin/interviews/{id}/reschedule"""
+    id: str
+    status: str
+    scheduled_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

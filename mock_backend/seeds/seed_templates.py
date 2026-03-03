@@ -19,7 +19,30 @@ async def seed_templates(session: AsyncSession):
     already_exists = result.scalar() is not None
 
     if already_exists:
-        logger.info("[template_seed] Active template already exists. Skipping.")
+        logger.info("[template_seed] Active template already exists. Checking for Default Rule Template...")
+    
+    # 1. Ensure a rule-based template exists
+    rule_stmt = select(InterviewTemplate).where(InterviewTemplate.title == "Default Rule Template")
+    rule_res = await session.execute(rule_stmt)
+    if not rule_res.scalar_one_or_none():
+        logger.info("[template_seed] Creating 'Default Rule Template'...")
+        rule_template = InterviewTemplate(
+            title="Default Rule Template",
+            description="Automatic question selection based on complexity",
+            is_active=True,
+            is_rule_based=True,
+            settings={
+                "difficulty_distribution": {
+                    "EASY": 2,
+                    "MEDIUM": 2,
+                    "HARD": 1
+                }
+            }
+        )
+        session.add(rule_template)
+        await session.flush()
+
+    if already_exists:
         return
 
     logger.info("[template_seed] No active templates found. Creating default template...")

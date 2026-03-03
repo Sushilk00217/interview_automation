@@ -1,89 +1,116 @@
 import uuid
 import random
-from sqlalchemy import select
+import logging
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.sql.models import InterviewTemplate, Question, TemplateQuestion, DifficultyEnum, CategoryEnum
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
-async def generate_questions_from_template(
-    session: AsyncSession,
-    template_id: uuid.UUID
-) -> list[Question]:
-    """
-    Generates a list of questions based on the template.
-    If the template is rule-based, it samples questions from the bank.
-    Otherwise, it returns the pre-defined questions in the template.
-    """
-    # 1. Fetch template
-    stmt = select(InterviewTemplate).where(InterviewTemplate.id == template_id)
-    result = await session.execute(stmt)
-    template = result.scalar_one_or_none()
-    
-    if not template:
-        raise ValueError(f"Template with id {template_id} not found")
+from app.db.sql.models.interview_template import InterviewTemplate, TemplateQuestion
+from app.db.sql.models.question import Question, DifficultyEnum, CategoryEnum
 
-    if template.is_rule_based:
-        # 2. Logic for rule-based template
-        category_filters = template.category_filters
-        difficulty_distribution = template.difficulty_distribution or {}
+logger = logging.getLogger(__name__)
+
+class TemplateEngineService:
+    @staticmethod
+    async def generate_questions_from_template(
+        template_id: uuid.UUID,
+        session: AsyncSession
+    ) -> List[Question]:
+        """
+        Generates a list of questions based on the template configuration.
+        If is_rule_based is True, selects random questions based on distribution.
+        Otherwise, returns the fixed questions defined in the template.
+        """
+        # Load template with its fixed questions
+        result = await session.execute(
+            select(InterviewTemplate)
+            .where(InterviewTemplate.id == template_id)
+            .options(selectinload(InterviewTemplate.questions).selectinload(TemplateQuestion.question))
+        )
+        template = result.scalar_one_or_none()
         
-        all_selected_questions = []
-        selected_ids = set()
+        if not template:
+            return []
+
+        if template.is_rule_based:
+            return await TemplateEngineService._generate_rule_based_questions(template, session)
+        else:
+            # Sort by order and return questions
+            sorted_template_questions = sorted(template.questions, key=lambda x: x.order)
+            return [tq.question for tq in sorted_template_questions if tq.question]
+
+    @staticmethod
+    async def _generate_rule_based_questions(
+        template: InterviewTemplate,
+        session: AsyncSession
+    ) -> List[Question]:
+        """
+        Logic for rule-based generation:
+        Expects template.settings to have:
+        {
+            "difficulty_distribution": {"EASY": 2, "MEDIUM": 3, "HARD": 1},
+            "category_filters": ["PYTHON", "SQL"]
+        }
+        """
+        settings = template.settings or {}
+        distribution = settings.get("difficulty_distribution", {})
+        categories = settings.get("category_filters", [])
         
-        for difficulty_str, count in difficulty_distribution.items():
-            if count <= 0:
-                continue
-                
+        generated_questions = []
+        
+        # Sort distribution keys to ensure difficulty blocks are processed in a deterministic order (e.g., EASY->MEDIUM->HARD)
+        # We'll use a specific order: EASY, then MEDIUM, then HARD.
+        difficulty_order = {DifficultyEnum.EASY: 0, DifficultyEnum.MEDIUM: 1, DifficultyEnum.HARD: 2}
+        sorted_difficulties = sorted(
+            distribution.keys(), 
+            key=lambda d: difficulty_order.get(DifficultyEnum(d) if d in DifficultyEnum.__members__ else d, 99)
+        )
+
+        for difficulty_str in sorted_difficulties:
+            count = distribution[difficulty_str]
             try:
-                difficulty_enum = DifficultyEnum(difficulty_str)
+                difficulty = DifficultyEnum(difficulty_str)
             except ValueError:
-                # Skip or raise error if invalid difficulty in distribution
                 continue
                 
-            # Query pool
             query = select(Question).where(
-                Question.is_active == True,
-                Question.difficulty == difficulty_enum
+                Question.difficulty == difficulty,
+                Question.is_active == True
             )
             
-            if category_filters:
-                # Convert string filters to CategoryEnum if needed, 
-                # but models usually store Enums. Let's assume input filters are strings.
-                valid_categories = []
-                for cat in category_filters:
+            # Exclude already selected questions to be 100% sure of no duplicates
+            if generated_questions:
+                excluded_ids = [q.id for q in generated_questions]
+                query = query.where(Question.id.not_in(excluded_ids))
+            
+            # Category filters: If empty, it naturally means "all categories"
+            if categories:
+                cat_enums = []
+                for cat_str in categories:
                     try:
-                        valid_categories.append(CategoryEnum(cat))
+                        cat_enums.append(CategoryEnum(cat_str))
                     except ValueError:
                         continue
-                if valid_categories:
-                    query = query.where(Question.category.in_(valid_categories))
+                if cat_enums:
+                    query = query.where(Question.category.in_(cat_enums))
             
-            if selected_ids:
-                query = query.where(Question.id.notin_(list(selected_ids)))
+            # Use random order for rule-based, deterministic LIMIT within this difficulty block
+            query = query.order_by(func.random()).limit(count)
             
-            res = await session.execute(query)
-            pool = res.scalars().all()
+            result = await session.execute(query)
+            batch = result.scalars().all()
             
-            if len(pool) < count:
-                raise ValueError(
-                    f"Insufficient questions in pool for difficulty {difficulty_str}. "
-                    f"Requested {count}, found {len(pool)}."
+            if len(batch) < count:
+                logger.warning(
+                    f"Could not satisfy distribution for {difficulty_str}. "
+                    f"Requested {count}, found {len(batch)}."
                 )
-            
-            sampled = random.sample(pool, count)
-            all_selected_questions.extend(sampled)
-            selected_ids.update(q.id for q in sampled)
-            
-        # Shuffle result to mix difficulties if desired, or keep grouped
-        random.shuffle(all_selected_questions)
-        return all_selected_questions
 
-    else:
-        # 3. Logic for fixed template
-        stmt = (
-            select(Question)
-            .join(TemplateQuestion, TemplateQuestion.question_id == Question.id)
-            .where(TemplateQuestion.template_id == template_id)
-            .order_by(TemplateQuestion.order)
-        )
-        res = await session.execute(stmt)
-        return list(res.scalars().all())
+            generated_questions.extend(batch)
+            
+        # We DO NOT shuffle here to maintain "Deterministic order within each difficulty block"
+        # The questions will appear in the order of sorted_difficulties.
+        return generated_questions
+
+template_engine = TemplateEngineService()

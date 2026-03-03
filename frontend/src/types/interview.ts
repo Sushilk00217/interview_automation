@@ -8,29 +8,35 @@ export type InterviewStatus =
 
 export interface InterviewTemplate {
     id: string;
-    name: string;
-    description: string;
-    total_duration_sec: number;
+    title: string;
+    role_name?: string | null;
+    description?: string | null;
     is_active: boolean;
+    is_rule_based: boolean;
+    is_default_for_role: boolean;
+    created_at: string;
+    updated_at: string;
+    settings?: Record<string, any> | null;
+}
+
+export interface InterviewTemplateCreate {
+    title: string;
+    role_name?: string;
+    description?: string;
+    is_rule_based: boolean;
+    is_active?: boolean;
+    is_default_for_role?: boolean;
+    settings?: Record<string, any>;
+}
+
+export interface InterviewTemplateUpdate {
+    title?: string;
+    role_name?: string;
+    description?: string;
     is_rule_based?: boolean;
-}
-
-export interface GeneratedQuestion {
-    question_id?: string;
-    question_text: string;
-    category?: string;
-    difficulty?: string;
-    order: number;
-    time_limit_sec: number;
-}
-
-export interface ApplyTemplateRequest {
-    questions: {
-        question_id?: string;
-        question_text: string;
-        order: number;
-        time_limit_sec: number;
-    }[];
+    is_active?: boolean;
+    is_default_for_role?: boolean;
+    settings?: Record<string, any>;
 }
 
 export interface CandidateInterview {
@@ -56,10 +62,29 @@ export interface CandidateWithInterview {
 
 // ─── Request / Response shapes ───────────────────────────────────────────────
 
+export interface InterviewSessionQuestionCreate {
+    question_id?: string;
+    custom_text?: string;
+    order: number;
+}
+
 export interface ScheduleInterviewRequest {
     candidate_id: string;
     template_id: string;
     scheduled_at: string; // ISO 8601 UTC
+    questions?: InterviewSessionQuestionCreate[];
+}
+
+export interface TemplatePreviewQuestion {
+    question_id: string;
+    text: string;
+    originalText?: string; // Keep track of the text before editing
+    difficulty: string;
+    category: string;
+}
+
+export interface TemplatePreviewResponse {
+    questions: TemplatePreviewQuestion[];
 }
 
 export interface RescheduleInterviewRequest {
