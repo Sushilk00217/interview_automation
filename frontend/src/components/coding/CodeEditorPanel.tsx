@@ -1,6 +1,7 @@
 import React from "react"
 import Editor from "@monaco-editor/react"
 import { useCodingStore } from "@/store/codingStore"
+import { useInterviewStore } from "@/store/interviewStore"
 
 export default function CodeEditorPanel() {
     const {
@@ -15,6 +16,11 @@ export default function CodeEditorPanel() {
         runCurrentCode,
         submitCurrentCode
     } = useCodingStore()
+
+    const interviewId = useInterviewStore(s => s.interviewId)
+    // We don't have a direct candidateId in interviewStore, but we can get it from auth if needed, 
+    // or the backend can infer it from the interview session.
+    // For now, let's just pass interviewId.
 
     const handleEditorChange = (value: string | undefined) => {
         setCode(value || "")
@@ -60,7 +66,7 @@ export default function CodeEditorPanel() {
                         Run tests
                     </button>
                     <button
-                        onClick={() => submitCurrentCode()}
+                        onClick={() => submitCurrentCode(interviewId || undefined)}
                         disabled={isSubmitted || isSubmitting || isRunning}
                         className="px-3 py-1 bg-blue-600 text-white text-xs font-black uppercase rounded border border-blue-700 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200"
                     >

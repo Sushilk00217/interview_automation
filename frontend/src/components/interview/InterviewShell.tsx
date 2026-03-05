@@ -245,6 +245,9 @@ export default function InterviewShell() {
 
     const handleSubmit = () => {
         if (isSubmitting) return;
+        if (currentQuestion?.type === "coding") {
+            return;
+        }
         // Allow submission if there's any content (trimmed)
         if (!answerPayload || !answerPayload.trim()) return;
 
@@ -298,7 +301,7 @@ export default function InterviewShell() {
                         </div>
 
                         {currentQuestion.type === "coding" ? (
-                            <CodingQuestion question={currentQuestion} />
+                            <CodingQuestion question={currentQuestion} interviewId={interviewId} />
                         ) : (
                             <>
                                 <QuestionPanel question={currentQuestion} />
