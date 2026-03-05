@@ -7,6 +7,7 @@ from app.api.v1 import candidate_profile_router
 from app.api.v1 import session_router
 from app.api.v1 import verification_router
 from app.api.v1 import template_router
+from app.api.v1 import coding_router
 
 from contextlib import asynccontextmanager
 from app.db.sql.session import AsyncSessionLocal, test_database_connection
@@ -55,6 +56,7 @@ app.include_router(candidate_profile_router.router, prefix="/api/v1/candidate", 
 app.include_router(session_router.router, prefix="/api/v1", tags=["Session"])
 app.include_router(verification_router.router, prefix="/api/v1/verification", tags=["Verification"])
 app.include_router(template_router.router, tags=["Admin Templates"])
+app.include_router(coding_router.router, prefix="/api/v1/candidate", tags=["Coding"])
 
 @app.get("/")
 async def root():

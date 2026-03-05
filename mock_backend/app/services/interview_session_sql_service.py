@@ -14,6 +14,8 @@ from app.db.sql.models.interview import Interview
 from app.db.sql.models.interview_session_question import InterviewSessionQuestion
 from app.db.sql.models.interview_response import InterviewResponse
 from app.db.sql.models.user import CandidateProfile
+from app.db.sql.models.coding_problem import CodingProblem, TestCase
+from app.db.sql.models.question import QuestionType
 from app.services.answer_evaluation_service import answer_evaluation_service
 
 # ── Mock score generation ──────────────────────────────────────────────────────
@@ -173,6 +175,54 @@ class InterviewSessionSQLService:
             answer_mode = answer_mode.upper() if answer_mode else "TEXT"
 
             prompt = q.custom_text or (q.question.text if q.question else "Please answer the following question.")
+
+            # ── Coding question branch ────────────────────────────────────────
+            if q.question and q.question.question_type == QuestionType.CODING:
+                # Look up the associated CodingProblem via question_id
+                cp_result = await session.execute(
+                    select(CodingProblem).where(CodingProblem.question_id == q.question.id)
+                )
+                coding_problem = cp_result.scalars().first()
+
+                if not coding_problem:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Coding problem configuration missing for this question.",
+                    )
+
+                # Fetch only visible (non-hidden) test cases as examples
+                tc_result = await session.execute(
+                    select(TestCase)
+                    .where(
+                        TestCase.problem_id == coding_problem.id,
+                        TestCase.is_hidden == False,  # noqa: E712
+                    )
+                    .order_by(TestCase.order)
+                )
+                visible_tcs = tc_result.scalars().all()
+
+                examples = [
+                    {
+                        "input": tc.input,
+                        "expected_output": tc.expected_output,
+                    }
+                    for tc in visible_tcs
+                ]
+
+                return {
+                    "type": "coding",
+                    "question_id": str(q.question.id),
+                    "problem_id": str(coding_problem.id),
+                    "title": coding_problem.title,
+                    "description": coding_problem.description,
+                    "starter_code": coding_problem.starter_code or {},
+                    "examples": examples,
+                    "time_limit_sec": coding_problem.time_limit_sec,
+                    # Keep parity fields so the frontend stays consistent
+                    "question_number": answered_count + 1,
+                    "total_questions": len(questions),
+                }
+            # ── End coding branch ─────────────────────────────────────────────
 
             return {
                 "question_id": str(q.id),

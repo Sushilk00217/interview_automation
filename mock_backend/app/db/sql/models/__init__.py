@@ -5,7 +5,8 @@ from app.db.sql.models.interview import Interview
 from app.db.sql.models.interview_session import InterviewSession
 from app.db.sql.models.interview_session_question import InterviewSessionQuestion
 from app.db.sql.models.interview_response import InterviewResponse
-from app.db.sql.models.question import Question, DifficultyEnum, CategoryEnum
+from app.db.sql.models.question import Question, DifficultyEnum, CategoryEnum, QuestionType
+from app.db.sql.models.coding_problem import CodingProblem, TestCase, CodeSubmission
 
 __all__ = [
     "Base",
@@ -21,4 +22,8 @@ __all__ = [
     "Question",
     "DifficultyEnum",
     "CategoryEnum",
+    "QuestionType",
+    "CodingProblem",
+    "TestCase",
+    "CodeSubmission",
 ]

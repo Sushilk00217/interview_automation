@@ -20,6 +20,11 @@ class CategoryEnum(str, enum.Enum):
     SYSTEM_DESIGN = "SYSTEM_DESIGN"
     STATISTICS = "STATISTICS"
 
+class QuestionType(str, enum.Enum):
+    TECHNICAL = "technical"
+    BEHAVIORAL = "behavioral"
+    CODING = "coding"
+
 class Question(Base):
     __tablename__ = "questions"
 
@@ -31,6 +36,11 @@ class Question(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=func.true(), default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    question_type: Mapped[QuestionType] = mapped_column(
+        SQLEnum(QuestionType),
+        nullable=False,
+        server_default="technical"
+    )
 
     # Relationship to TemplateQuestion
     template_questions: Mapped[list["TemplateQuestion"]] = relationship("TemplateQuestion", back_populates="question")

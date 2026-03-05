@@ -10,3 +10,8 @@ class InterviewStatus(str, enum.Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     PENDING_REVIEW = "pending_review"
+
+class SubmissionStatus(str, enum.Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
