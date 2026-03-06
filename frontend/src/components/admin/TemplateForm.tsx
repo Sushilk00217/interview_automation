@@ -69,15 +69,18 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
     const [easyCount, setEasyCount] = useState<number>(techCfg?.easy ?? techCfg?.EASY ?? 0);
     const [mediumCount, setMediumCount] = useState<number>(techCfg?.medium ?? techCfg?.MEDIUM ?? 0);
     const [hardCount, setHardCount] = useState<number>(techCfg?.hard ?? techCfg?.HARD ?? 0);
+    const [techDuration, setTechDuration] = useState<number>(techCfg?.duration_minutes ?? 20);
 
     // ── Coding config ──
     const initCoding = initialData?.coding_config || {};
     const [codingCount, setCodingCount] = useState<number>(initCoding?.count ?? 0);
     const [codingDifficulties, setCodingDifficulties] = useState<string[]>(initCoding?.difficulty ?? []);
+    const [codingDuration, setCodingDuration] = useState<number>(initCoding?.duration_minutes ?? 40);
 
     // ── Conversational config ──
     const initConv = initialData?.conversational_config || {};
     const [convRounds, setConvRounds] = useState<number>(initConv?.rounds ?? 0);
+    const [convDuration, setConvDuration] = useState<number>(initConv?.duration_minutes ?? 15);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -110,11 +113,12 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
 
         setLoading(true);
 
-        // ── technical_config: always flat {easy, medium, hard} ──────────────────
+        // ── technical_config: always flat {easy, medium, hard, duration_minutes} ──
         const technical_config = {
             easy: Number(easyCount),
             medium: Number(mediumCount),
             hard: Number(hardCount),
+            duration_minutes: Number(techDuration),
         };
 
         // ── coding_config: null if nothing configured, difficulties lowercased ──
@@ -122,12 +126,16 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
             ? {
                 count: Number(codingCount),
                 difficulty: codingDifficulties.map(d => d.toLowerCase()),
+                duration_minutes: Number(codingDuration),
             }
             : null;
 
         // ── conversational_config: null if no rounds ─────────────────────────────
         const conversational_config = convRounds > 0
-            ? { rounds: Number(convRounds) }
+            ? {
+                rounds: Number(convRounds),
+                duration_minutes: Number(convDuration),
+            }
             : null;
 
         // ── Payload: no legacy settings ──────────────────────────────────────────
@@ -222,7 +230,7 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
                             <p className="text-xs text-gray-500">
                                 Set how many questions to pull per difficulty level.
                             </p>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-4 gap-3">
                                 {([['Easy', easyCount, setEasyCount], ['Medium', mediumCount, setMediumCount], ['Hard', hardCount, setHardCount]] as [string, number, (v: number) => void][]).map(([label, val, setter]) => (
                                     <div key={label}>
                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{label}</label>
@@ -233,6 +241,14 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
                                         />
                                     </div>
                                 ))}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1 text-blue-600">Duration (min)</label>
+                                    <input
+                                        type="number" min={1} value={techDuration}
+                                        onChange={e => setTechDuration(Number(e.target.value))}
+                                        className="w-full px-3 py-2 text-gray-900 bg-white rounded-lg border border-blue-200 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                                    />
+                                </div>
                             </div>
                             <p className="text-xs text-gray-400">
                                 Config: {JSON.stringify({ easy: Number(easyCount), medium: Number(mediumCount), hard: Number(hardCount) })}
@@ -252,16 +268,28 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
                     />
                     {codingOpen && (
                         <div className="p-4 bg-gray-50 border-t space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                                    Number of Problems
-                                </label>
-                                <input
-                                    type="number" min={0} value={codingCount}
-                                    onChange={e => setCodingCount(Number(e.target.value))}
-                                    placeholder="0"
-                                    className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border text-sm"
-                                />
+                            <div className="flex gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        Number of Problems
+                                    </label>
+                                    <input
+                                        type="number" min={0} value={codingCount}
+                                        onChange={e => setCodingCount(Number(e.target.value))}
+                                        placeholder="0"
+                                        className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1 text-purple-600">
+                                        Duration (min)
+                                    </label>
+                                    <input
+                                        type="number" min={1} value={codingDuration}
+                                        onChange={e => setCodingDuration(Number(e.target.value))}
+                                        className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border border-purple-200 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                                    />
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
@@ -309,14 +337,24 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
                                 Conversational questions are generated live by Ai during the interview.
                                 Set how many rounds the session should include.
                             </p>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Number of Rounds</label>
-                                <input
-                                    type="number" min={0} value={convRounds}
-                                    onChange={e => setConvRounds(Number(e.target.value))}
-                                    placeholder="0"
-                                    className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border text-sm"
-                                />
+                            <div className="flex gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Number of Rounds</label>
+                                    <input
+                                        type="number" min={0} value={convRounds}
+                                        onChange={e => setConvRounds(Number(e.target.value))}
+                                        placeholder="0"
+                                        className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1 text-emerald-600">Duration (min)</label>
+                                    <input
+                                        type="number" min={1} value={convDuration}
+                                        onChange={e => setConvDuration(Number(e.target.value))}
+                                        className="w-32 px-3 py-2 text-gray-900 bg-white rounded-lg border border-emerald-200 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                                    />
+                                </div>
                             </div>
                             <p className="text-xs text-gray-400">
                                 Config: {JSON.stringify({ rounds: Number(convRounds) })}

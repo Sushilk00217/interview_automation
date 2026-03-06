@@ -148,25 +148,63 @@ class InterviewSQLService:
             uow.interviews.create_session(new_session)
             await uow.flush() # Needed so we can return the ID and use it for relationships
             
+            # Retrieve durations from template configs
+            tech_dur = 20
+            coding_dur = 40
+            conv_dur = 15
+            
+            from app.db.sql.models.interview_template import InterviewTemplate
+            template_obj = None
+            if interview.template_id:
+                template_obj = await uow.session.get(InterviewTemplate, interview.template_id)
+                
+            if template_obj:
+                t_cfg = template_obj.technical_config or {}
+                c_cfg = template_obj.coding_config or {}
+                v_cfg = template_obj.conversational_config or {}
+                
+                # Tech duration
+                if "duration_minutes" in t_cfg and t_cfg["duration_minutes"] > 0:
+                    tech_dur = t_cfg["duration_minutes"]
+                else:
+                    logger.warning(f"Interview {interview_id}: Missing technical duration in template {template_obj.id}, using default 20m")
+                
+                # Coding duration
+                if "duration_minutes" in c_cfg and c_cfg["duration_minutes"] > 0:
+                    coding_dur = c_cfg["duration_minutes"]
+                else:
+                    logger.warning(f"Interview {interview_id}: Missing coding duration in template {template_obj.id}, using default 40m")
+                
+                # Conversational duration
+                if "duration_minutes" in v_cfg and v_cfg["duration_minutes"] > 0:
+                    conv_dur = v_cfg["duration_minutes"]
+                else:
+                    logger.warning(f"Interview {interview_id}: Missing conversational duration in template {template_obj.id}, using default 15m")
+            else:
+                logger.warning(f"Interview {interview_id}: No template found for session creation, using global defaults for durations")
+
             from app.db.sql.models.interview_session_section import InterviewSessionSection
             
-            # Create the three sections
+            # Create the three sections with extracted durations
             tech_section = InterviewSessionSection(
                 interview_session_id=new_session.id,
                 section_type="technical",
                 order_index=1,
+                duration_minutes=tech_dur,
                 status="pending"
             )
             coding_section = InterviewSessionSection(
                 interview_session_id=new_session.id,
                 section_type="coding",
                 order_index=2,
+                duration_minutes=coding_dur,
                 status="pending"
             )
             conv_section = InterviewSessionSection(
                 interview_session_id=new_session.id,
                 section_type="conversational",
                 order_index=3,
+                duration_minutes=conv_dur,
                 status="pending"
             )
             uow.session.add_all([tech_section, coding_section, conv_section])
