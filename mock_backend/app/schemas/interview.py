@@ -48,6 +48,7 @@ class CuratedQuestionItem(BaseModel):
     question_type: Literal["static", "conversational", "coding"]
     order: int
     prompt: str
+    text: Optional[str] = None
     difficulty: Literal["easy", "medium", "hard"]
     time_limit_sec: int
 
@@ -71,12 +72,31 @@ class CuratedQuestionItem(BaseModel):
         extra = "allow"   # forward-compatible: extra keys from AI agent won't break deserialization
 
 
+class TechnicalSection(BaseModel):
+    questions: List[CuratedQuestionItem]
+
+class CodingProblemItem(BaseModel):
+    problem_id: str
+    title: str
+    difficulty: str
+    description: Optional[str] = None
+    starter_code: Optional[str] = None
+
+class CodingSection(BaseModel):
+    problems: List[CodingProblemItem]
+
+class ConversationalSection(BaseModel):
+    rounds: int
+
 class CuratedQuestionsPayload(BaseModel):
     template_id: str
     generated_from: dict
     generated_at: datetime
     generation_method: str
-    questions: List[CuratedQuestionItem]
+    questions: Optional[List[CuratedQuestionItem]] = None
+    technical_section: Optional[TechnicalSection] = None
+    coding_section: Optional[CodingSection] = None
+    conversational_section: Optional[ConversationalSection] = None
 
 
 class InterviewTemplateResponse(BaseModel):

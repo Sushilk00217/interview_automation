@@ -341,29 +341,6 @@ async def cancel_interview(
     }
 
 
-@router.get(
-    "/{interview_id}/questions",
-    summary="Get questions for a scheduled interview",
-    description="Admin-only. Returns the curated questions for a scheduled interview.",
-)
-async def get_interview_questions(
-    interview_id: str,
-    current_admin: User = Depends(get_current_admin),
-    session: AsyncSession = Depends(get_db_session),
-):
-    """Get questions for a scheduled interview."""
-    validated_id = validate_uuid(interview_id)
-    interview = await InterviewAdminSQLService.get_interview_details(session, validated_id)
-    
-    if not interview:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    
-    if not interview.curated_questions:
-        return {"questions": []}
-    
-    questions = interview.curated_questions.get('questions', [])
-    return {"questions": questions}
-
 
 @router.put(
     "/{interview_id}/questions",

@@ -227,8 +227,14 @@ class InterviewSQLService:
             # 1. ADD TECHNICAL QUESTIONS FROM curated_questions
             # NOTE: Conversational questions are NOT created here - they are generated LIVE
             # when the candidate enters the conversational section, based on their projects
-            if interview.curated_questions and 'questions' in interview.curated_questions:
-                questions_list = interview.curated_questions['questions']
+            if interview.curated_questions:
+                # Determine which list to use: new nested structure or legacy flat structure
+                questions_list = []
+                if 'technical_section' in interview.curated_questions and 'questions' in interview.curated_questions['technical_section']:
+                    questions_list = interview.curated_questions['technical_section']['questions']
+                elif 'questions' in interview.curated_questions:
+                    questions_list = interview.curated_questions['questions']
+                
                 for q_data in questions_list:
                     q_type = q_data.get('question_type', 'technical')
                     # Normalize question_type: 'static' -> 'technical'

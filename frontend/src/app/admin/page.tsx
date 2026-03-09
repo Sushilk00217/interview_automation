@@ -15,7 +15,6 @@ import { CandidateResponse } from '@/types/api';
 import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
 import ResumePreviewModal from '@/components/admin/ResumePreviewModal';
-import InterviewQuestionsModal from '@/components/admin/InterviewQuestionsModal';
 import InterviewReportModal from '@/components/admin/InterviewReportModal';
 import { Toast, useToast } from '@/components/ui/Toast';
 
@@ -127,7 +126,6 @@ export default function AdminDashboardPage() {
     // -- Schedule / Reschedule ---------------------------------------------------
     const [scheduleTarget, setScheduleTarget] = useState<CandidateRow | null>(null);
     const [scheduleMode, setScheduleMode] = useState<'schedule' | 'reschedule'>('schedule');
-    const [questionsModalInterviewId, setQuestionsModalInterviewId] = useState<string | null>(null);
 
     // -- Cancel ------------------------------------------------------------------
     const [cancelTarget, setCancelTarget] = useState<CandidateRow | null>(null);
@@ -287,10 +285,6 @@ export default function AdminDashboardPage() {
         setScheduleTarget(null);
         toast.success(scheduleMode === 'schedule' ? 'Interview scheduled!' : 'Interview rescheduled!');
         fetchData();
-        // Show questions modal after scheduling (only for new interviews)
-        if (scheduleMode === 'schedule' && interviewId) {
-            setQuestionsModalInterviewId(interviewId);
-        }
     };
 
     const handleConfirmCancel = async () => {
@@ -746,18 +740,6 @@ export default function AdminDashboardPage() {
                 />
             )}
 
-            {/* Interview Questions Modal */}
-            {questionsModalInterviewId && (
-                <InterviewQuestionsModal
-                    interviewId={questionsModalInterviewId}
-                    onClose={() => setQuestionsModalInterviewId(null)}
-                    onSuccess={() => {
-                        toast.success('Questions updated successfully!');
-                        fetchData();
-                    }}
-                    onAuthError={handleAuthError}
-                />
-            )}
 
             {/* Interview Report Modal */}
             {reportTarget && (

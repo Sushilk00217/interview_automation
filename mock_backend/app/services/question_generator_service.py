@@ -1305,7 +1305,7 @@ Return ONLY the JSON object."""
             p = random.choice(available)
             
             return {
-                "coding_problem_id": str(p.id),
+                "problem_id": str(p.id),
                 "title": p.title,
                 "difficulty": p.difficulty,
                 "description": p.description,

@@ -276,19 +276,6 @@ export interface InterviewQuestionsResponse {
     questions: InterviewQuestion[];
 }
 
-export async function getInterviewQuestions(
-    interviewId: string
-): Promise<InterviewQuestionsResponse> {
-    const res = await fetch(
-        `${BASE_URL}/api/v1/admin/interviews/${interviewId}/questions`,
-        {
-            headers: authHeaders(),
-        }
-    );
-    if (!res.ok) throw await parseError(res);
-    return res.json();
-}
-
 export async function updateInterviewQuestions(
     interviewId: string,
     questions: InterviewQuestion[]

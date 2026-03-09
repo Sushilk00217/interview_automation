@@ -184,7 +184,7 @@ class InterviewAdminSQLService:
             if section_type is None:
                 coding_problems = (curated.get('coding_section') or {}).get('problems', [])
                 for idx, p in enumerate(coding_problems):
-                    if p.get('coding_problem_id') == question_id:
+                    if p.get('problem_id') == question_id:
                         section_type = 'coding'
                         target_idx = idx
                         target_q = p
@@ -246,7 +246,7 @@ class InterviewAdminSQLService:
                 config = template.coding_config or {}
                 difficulties = config.get("difficulty", ["medium"])
                 
-                exclude_ids = [p.get('coding_problem_id') for p in questions_list]
+                exclude_ids = [p.get('problem_id') for p in questions_list]
                 new_q = await question_generator_service._get_single_replacement_coding_problem_from_bank(
                     session=session,
                     exclude_ids=exclude_ids,
