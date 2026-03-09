@@ -16,6 +16,7 @@ import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
 import ResumePreviewModal from '@/components/admin/ResumePreviewModal';
 import InterviewQuestionsModal from '@/components/admin/InterviewQuestionsModal';
+import InterviewReportModal from '@/components/admin/InterviewReportModal';
 import { Toast, useToast } from '@/components/ui/Toast';
 
 // --- Types ----------------------------------------------------------------------
@@ -131,6 +132,7 @@ export default function AdminDashboardPage() {
     // -- Cancel ------------------------------------------------------------------
     const [cancelTarget, setCancelTarget] = useState<CandidateRow | null>(null);
     const [summaryTarget, setSummaryTarget] = useState<CandidateRow | null>(null);
+    const [reportTarget, setReportTarget] = useState<{ interviewId: string; candidateName: string } | null>(null);
     const [previewTarget, setPreviewTarget] = useState<CandidateRow | null>(null);
     const [cancelLoading, setCancelLoading] = useState(false);
 
@@ -649,9 +651,9 @@ export default function AdminDashboardPage() {
                                                                 Cancel
                                                             </button>
                                                         )}
-                                                        {ivStatus === 'completed' && s?.overall_score != null && (
+                                                        {ivStatus === 'completed' && s?.interview_id && (
                                                             <button
-                                                                onClick={() => setSummaryTarget(candidate)}
+                                                                onClick={() => setReportTarget({ interviewId: s.interview_id, candidateName: candidate.username })}
                                                                 className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold hover:bg-purple-100 transition-colors"
                                                             >
                                                                 View Results
@@ -753,6 +755,16 @@ export default function AdminDashboardPage() {
                         toast.success('Questions updated successfully!');
                         fetchData();
                     }}
+                    onAuthError={handleAuthError}
+                />
+            )}
+
+            {/* Interview Report Modal */}
+            {reportTarget && (
+                <InterviewReportModal
+                    interviewId={reportTarget.interviewId}
+                    candidateName={reportTarget.candidateName}
+                    onClose={() => setReportTarget(null)}
                     onAuthError={handleAuthError}
                 />
             )}

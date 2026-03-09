@@ -60,7 +60,7 @@ class ReportGenerationService:
         else:
             session_stmt = select(InterviewSession).where(
                 InterviewSession.interview_id == interview_uuid
-            ).order_by(InterviewSession.created_at.desc())
+            ).order_by(InterviewSession.started_at.desc())
         
         session_result = await session.execute(session_stmt)
         interview_session = session_result.scalar_one_or_none()
@@ -135,7 +135,7 @@ class ReportGenerationService:
             "session_id": str(interview_session.id),
             "candidate_id": str(interview.candidate_id),
             "candidate_name": candidate_profile.first_name + " " + candidate_profile.last_name if candidate_profile else "Unknown",
-            "interview_date": interview_session.created_at.isoformat() if interview_session.created_at else None,
+            "interview_date": interview_session.started_at.isoformat() if interview_session.started_at else None,
             "completed_at": interview_session.completed_at.isoformat() if interview_session.completed_at else None,
             "overall_score": round(average_score, 2),
             "max_score": round(max_score, 2),

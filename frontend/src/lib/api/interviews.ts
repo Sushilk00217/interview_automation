@@ -156,6 +156,51 @@ export async function fetchInterviewSummary(): Promise<InterviewSummaryItem[]> {
     return res.json();
 }
 
+// ─── Interview Report ────────────────────────────────────────────────────────────
+
+export interface InterviewReport {
+    interview_id: string;
+    session_id: string;
+    candidate_id: string;
+    candidate_name: string;
+    interview_date: string | null;
+    completed_at: string | null;
+    overall_score: number;
+    max_score: number;
+    min_score: number;
+    total_questions: number;
+    answered_questions: number;
+    recommendation: string;
+    recommendation_reason: string;
+    strengths: string[];
+    weaknesses: string[];
+    question_breakdown: Array<{
+        question_id: string;
+        question_text: string;
+        question_type: string;
+        answer_text: string;
+        score: number | null;
+        feedback: string | null;
+        strengths: string[];
+        weaknesses: string[];
+        submitted_at: string | null;
+    }>;
+    proctoring_summary: {
+        face_verification_alerts: number;
+        voice_verification_alerts: number;
+        termination_reason: string | null;
+    };
+    generated_at: string;
+}
+
+export async function fetchInterviewReport(interviewId: string): Promise<InterviewReport> {
+    const res = await fetch(`${BASE_URL}/api/v1/dashboard/interviews/${interviewId}/report`, {
+        headers: authHeaders(),
+    });
+    if (!res.ok) throw await parseError(res);
+    return res.json();
+}
+
 // ─── Candidate: active interview ──────────────────────────────────────────────
 
 export interface ActiveInterviewResponse {
