@@ -33,7 +33,7 @@ class Question(Base):
     category: Mapped[CategoryEnum] = mapped_column(SQLEnum(CategoryEnum), nullable=False)
     difficulty: Mapped[DifficultyEnum] = mapped_column(SQLEnum(DifficultyEnum), nullable=False)
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=True) # Usually list[str] for tags
-    is_active: Mapped[bool] = mapped_column(Boolean, server_default=func.true(), default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     question_type: Mapped[QuestionType] = mapped_column(
