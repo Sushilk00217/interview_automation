@@ -18,6 +18,7 @@ class ScheduleInterviewRequest(BaseModel):
     template_id: str = Field(..., description="UUID of the interview template")
     scheduled_at: datetime = Field(..., description="Future UTC datetime for the interview")
     questions: Optional[List[InterviewSessionQuestionCreate]] = Field(None, description="Optional custom questions to override template defaults")
+    draft_interview_id: Optional[str] = Field(None, description="UUID of the draft interview to finalize")
 
 
 class RescheduleInterviewRequest(BaseModel):

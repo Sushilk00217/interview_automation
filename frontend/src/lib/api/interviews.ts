@@ -13,6 +13,7 @@ import {
     CandidateInterview,
     SchedulingApiError,
     TemplatePreviewResponse,
+    TemplatePreviewQuestion,
 } from '@/types/interview';
 
 // Re-export so consumers can import from this module
@@ -298,6 +299,23 @@ export async function updateInterviewQuestions(
             method: 'PUT',
             headers: authHeaders(),
             body: JSON.stringify(questions),
+        }
+    );
+    if (!res.ok) throw await parseError(res);
+    return res.json();
+}
+
+export async function regenerateQuestion(
+    interviewId: string,
+    questionId: string,
+    comment?: string
+): Promise<TemplatePreviewQuestion> {
+    const res = await fetch(
+        `${BASE_URL}/api/v1/admin/interviews/${interviewId}/questions/${questionId}/regenerate`,
+        {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ comment }),
         }
     );
     if (!res.ok) throw await parseError(res);

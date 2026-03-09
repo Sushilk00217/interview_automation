@@ -70,6 +70,7 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
     const [mediumCount, setMediumCount] = useState<number>(techCfg?.medium ?? techCfg?.MEDIUM ?? 0);
     const [hardCount, setHardCount] = useState<number>(techCfg?.hard ?? techCfg?.HARD ?? 0);
     const [techDuration, setTechDuration] = useState<number>(techCfg?.duration_minutes ?? 20);
+    const [questionSource, setQuestionSource] = useState<string>(techCfg?.question_source || 'ai_generated');
 
     // ── Coding config ──
     const initCoding = initialData?.coding_config || {};
@@ -119,6 +120,7 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
             medium: Number(mediumCount),
             hard: Number(hardCount),
             duration_minutes: Number(techDuration),
+            question_source: questionSource,
         };
 
         // ── coding_config: null if nothing configured, difficulties lowercased ──
@@ -227,6 +229,25 @@ export default function TemplateForm({ initialData, onSubmit, onCancel }: Templa
                     />
                     {techOpen && (
                         <div className="p-4 bg-gray-50 border-t space-y-3">
+                            <div className="flex items-center gap-4 mb-4">
+                                <label className="text-xs font-bold text-gray-500 uppercase">Question Source:</label>
+                                <div className="flex bg-gray-200 p-1 rounded-lg">
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuestionSource('ai_generated')}
+                                        className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${questionSource === 'ai_generated' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        AI GENERATED
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuestionSource('question_bank')}
+                                        className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${questionSource === 'question_bank' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        QUESTION BANK
+                                    </button>
+                                </div>
+                            </div>
                             <p className="text-xs text-gray-500">
                                 Set how many questions to pull per difficulty level.
                             </p>

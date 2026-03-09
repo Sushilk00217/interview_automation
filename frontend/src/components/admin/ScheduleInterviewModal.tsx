@@ -49,6 +49,10 @@ export default function ScheduleInterviewModal({
     const [previewCodingProblems, setPreviewCodingProblems] = useState<{ problem_id: string; title: string; difficulty: string }[]>([]);
     const [previewConvRounds, setPreviewConvRounds] = useState<number>(0);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [draftInterviewId, setDraftInterviewId] = useState<string | null>(null);
+    const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+    const [regenComment, setRegenComment] = useState('');
+    const [showRegenPrompt, setShowRegenPrompt] = useState<string | null>(null);
 
     // ─── Fetch preview when templateId changes ───────────────────────────────
     useEffect(() => {
@@ -62,6 +66,7 @@ export default function ScheduleInterviewModal({
         setPreviewLoading(true);
         previewTemplate(templateId, candidateId)
             .then((data) => {
+                setDraftInterviewId(data.interview_id || null);
                 // Technical questions
                 const rawQuestions = data.technical_section?.questions ?? [];
                 setPreviewQuestions(rawQuestions.map(q => ({ ...q, originalText: q.text })));
@@ -75,9 +80,10 @@ export default function ScheduleInterviewModal({
                 setPreviewQuestions([]);
                 setPreviewCodingProblems([]);
                 setPreviewConvRounds(0);
+                setDraftInterviewId(null);
             })
             .finally(() => setPreviewLoading(false));
-    }, [templateId, mode]);
+    }, [templateId, mode, candidateId]);
 
     const [scheduledAt, setScheduledAt] = useState(nowLocal);
     const [loading, setLoading] = useState(false);
@@ -133,6 +139,25 @@ export default function ScheduleInterviewModal({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose, loading]);
 
+    const handleRegenerate = async (questionId: string) => {
+        if (!draftInterviewId) return;
+        setRegeneratingId(questionId);
+        try {
+            const importApi = await import('@/lib/api/interviews');
+            const newQ = await importApi.regenerateQuestion(draftInterviewId, questionId, regenComment);
+
+            setPreviewQuestions(prev => prev.map(q =>
+                q.question_id === questionId ? { ...newQ, originalText: newQ.text } : q
+            ));
+            setShowRegenPrompt(null);
+            setRegenComment('');
+        } catch (err: any) {
+            setError(`Failed to regenerate question: ${err.detail || err.message}`);
+        } finally {
+            setRegeneratingId(null);
+        }
+    };
+
     // ─── Submit ───────────────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -153,17 +178,23 @@ export default function ScheduleInterviewModal({
             const isoAt = new Date(scheduledAt).toISOString();
 
             if (mode === 'schedule') {
-                const questions = previewQuestions.map((q, idx) => ({
-                    question_id: q.question_id,
-                    // Fix: send custom_text ONLY if modified.
-                    custom_text: q.text !== q.originalText ? q.text : undefined,
-                    order: idx + 1
-                }));
+                const questions = [
+                    ...previewQuestions.map((q, idx) => ({
+                        question_id: q.question_id,
+                        custom_text: q.text !== q.originalText ? q.text : undefined,
+                        order: idx + 1
+                    })),
+                    ...previewCodingProblems.map((p, idx) => ({
+                        question_id: p.problem_id,
+                        order: previewQuestions.length + idx + 1
+                    }))
+                ];
                 const response = await scheduleInterview({
                     candidate_id: candidateId,
                     template_id: templateId,
                     scheduled_at: isoAt,
-                    questions
+                    questions,
+                    draft_interview_id: draftInterviewId || undefined
                 });
                 onSuccess(response.id); // Pass interview ID to show questions modal
             } else {
@@ -192,7 +223,7 @@ export default function ScheduleInterviewModal({
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden"
             onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose(); }}
         >
-            <div className="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
+            <div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
                     <div className="flex justify-between items-start">
@@ -286,7 +317,7 @@ export default function ScheduleInterviewModal({
                                                     Technical Questions ({previewQuestions.length})
                                                 </p>
                                             </div>
-                                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                            <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                                                 {previewQuestions.map((q, idx) => (
                                                     <div key={idx} className="group relative bg-white border hover:border-blue-200 rounded-lg p-3 transition-all duration-200 shadow-sm">
                                                         <div className="flex justify-between items-center mb-1.5">
@@ -295,10 +326,17 @@ export default function ScheduleInterviewModal({
                                                             </span>
                                                             <div className="flex items-center gap-2">
                                                                 {editingIdx !== idx && (
-                                                                    <button type="button" onClick={() => { setEditingIdx(idx); setTempEditText(q.text); }}
-                                                                        className="text-[10px] font-bold text-blue-500 hover:text-blue-700 uppercase">
-                                                                        Edit
-                                                                    </button>
+                                                                    <>
+                                                                        <button type="button" onClick={() => setShowRegenPrompt(q.question_id)}
+                                                                            disabled={regeneratingId === q.question_id}
+                                                                            className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase disabled:opacity-50">
+                                                                            {regeneratingId === q.question_id ? 'Regenerating...' : 'Regenerate'}
+                                                                        </button>
+                                                                        <button type="button" onClick={() => { setEditingIdx(idx); setTempEditText(q.text || (q as any).prompt); }}
+                                                                            className="text-[10px] font-bold text-blue-500 hover:text-blue-700 uppercase">
+                                                                            Edit
+                                                                        </button>
+                                                                    </>
                                                                 )}
                                                                 <button type="button"
                                                                     onClick={() => setPreviewQuestions(prev => prev.filter((_, i) => i !== idx))}
@@ -320,15 +358,53 @@ export default function ScheduleInterviewModal({
                                                                     <button type="button" onClick={() => setEditingIdx(null)}
                                                                         className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">Cancel</button>
                                                                     <button type="button"
-                                                                        onClick={() => {
-                                                                            setPreviewQuestions(prev => prev.map((item, i) => i === idx ? { ...item, text: tempEditText } : item));
+                                                                        onClick={async () => {
+                                                                            const updated = previewQuestions.map((item, i) => i === idx ? { ...item, text: tempEditText } : item);
+                                                                            setPreviewQuestions(updated);
                                                                             setEditingIdx(null);
+
+                                                                            // PERSIST to backend draft if it exists
+                                                                            if (draftInterviewId) {
+                                                                                const { updateInterviewQuestions } = await import('@/lib/api/interviews');
+                                                                                try {
+                                                                                    await updateInterviewQuestions(draftInterviewId, updated.map((q, i) => ({
+                                                                                        question_id: q.question_id,
+                                                                                        order: i + 1,
+                                                                                        prompt: q.text,
+                                                                                        question_type: 'static',
+                                                                                        difficulty: q.difficulty as any,
+                                                                                        time_limit_sec: 60 // Default
+                                                                                    })));
+                                                                                } catch (err) {
+                                                                                    console.error("Failed to persist edits to draft:", err);
+                                                                                }
+                                                                            }
                                                                         }}
                                                                         className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">Save</button>
                                                                 </div>
                                                             </div>
+                                                        ) : showRegenPrompt === q.question_id ? (
+                                                            <div className="space-y-2 p-2 bg-emerald-50 rounded border border-emerald-100 animate-in fade-in slide-in-from-top-1">
+                                                                <p className="text-[10px] font-bold text-emerald-700 uppercase">Regeneration Instructions (Optional)</p>
+                                                                <textarea
+                                                                    value={regenComment}
+                                                                    onChange={(e) => setRegenComment(e.target.value)}
+                                                                    placeholder="e.g. Make it more advanced, focus on React hooks..."
+                                                                    className="w-full text-xs text-gray-700 bg-white border border-emerald-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 outline-none resize-none"
+                                                                    rows={2}
+                                                                />
+                                                                <div className="flex justify-end gap-2">
+                                                                    <button type="button" onClick={() => setShowRegenPrompt(null)}
+                                                                        className="text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase">Cancel</button>
+                                                                    <button type="button"
+                                                                        onClick={() => handleRegenerate(q.question_id)}
+                                                                        className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 uppercase">
+                                                                        Regenerate Now
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         ) : (
-                                                            <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">{q.text}</p>
+                                                            <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">{q.text || (q as any).prompt}</p>
                                                         )}
                                                     </div>
                                                 ))}
@@ -345,23 +421,37 @@ export default function ScheduleInterviewModal({
                                                     Coding Problems ({previewCodingProblems.length})
                                                 </p>
                                             </div>
-                                            <div className="space-y-1.5">
-                                                {previewCodingProblems.map((p, idx) => {
-                                                    const diffColor: Record<string, string> = {
-                                                        easy: 'bg-green-50 text-green-700 border-green-200',
-                                                        medium: 'bg-amber-50 text-amber-700 border-amber-200',
-                                                        hard: 'bg-red-50 text-red-700 border-red-200',
-                                                    };
-                                                    const color = diffColor[p.difficulty?.toLowerCase() ?? ''] ?? 'bg-gray-50 text-gray-600 border-gray-200';
-                                                    return (
-                                                        <div key={idx} className="flex items-center justify-between bg-white border rounded-lg px-3 py-2 shadow-sm">
-                                                            <span className="text-sm text-gray-800 font-medium">• {p.title}</span>
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${color}`}>
-                                                                {p.difficulty}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
+                                            <div className="overflow-hidden border border-purple-100 rounded-lg shadow-sm">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-purple-50/50">
+                                                            <th className="px-3 py-2 text-[10px] font-bold text-purple-700 uppercase tracking-wider">#</th>
+                                                            <th className="px-3 py-2 text-[10px] font-bold text-purple-700 uppercase tracking-wider">Problem Title</th>
+                                                            <th className="px-3 py-2 text-[10px] font-bold text-purple-700 uppercase tracking-wider text-right">Difficulty</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-purple-50">
+                                                        {previewCodingProblems.map((p, idx) => {
+                                                            const diffColor: Record<string, string> = {
+                                                                easy: 'text-green-600 bg-green-50 border-green-100',
+                                                                medium: 'text-amber-600 bg-amber-50 border-amber-100',
+                                                                hard: 'text-red-600 bg-red-50 border-red-100',
+                                                            };
+                                                            const colorClass = diffColor[p.difficulty?.toLowerCase()] || 'text-gray-600 bg-gray-50 border-gray-100';
+                                                            return (
+                                                                <tr key={idx} className="hover:bg-purple-50/30 transition-colors">
+                                                                    <td className="px-3 py-2.5 text-xs text-gray-500 font-medium">{idx + 1}</td>
+                                                                    <td className="px-3 py-2.5 text-sm font-semibold text-gray-800">{p.title}</td>
+                                                                    <td className="px-3 py-2.5 text-right">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${colorClass}`}>
+                                                                            {p.difficulty}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
                                     )}

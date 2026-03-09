@@ -4,7 +4,8 @@ export type InterviewStatus =
     | 'scheduled'
     | 'in_progress'
     | 'completed'
-    | 'cancelled';
+    | 'cancelled'
+    | 'draft';
 
 export interface InterviewTemplate {
     id: string;
@@ -79,6 +80,7 @@ export interface ScheduleInterviewRequest {
     template_id: string;
     scheduled_at: string; // ISO 8601 UTC
     questions?: InterviewSessionQuestionCreate[];
+    draft_interview_id?: string;
 }
 
 export interface TemplatePreviewQuestion {
@@ -90,6 +92,7 @@ export interface TemplatePreviewQuestion {
 }
 
 export interface TemplatePreviewResponse {
+    interview_id?: string;
     technical_section: { questions: TemplatePreviewQuestion[] };
     coding_section: { problems: { problem_id: string; title: string; difficulty: string }[] };
     conversational_section: { rounds: number; description: string };

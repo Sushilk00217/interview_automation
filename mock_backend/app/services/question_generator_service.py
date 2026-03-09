@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.db.sql.models.question import Question, DifficultyEnum, CategoryEnum
+from app.db.sql.models.coding_problem import CodingProblem
 from app.services.resume_jd_parser import resume_jd_parser
 from app.services.azure_openai_service import azure_openai_service
 
@@ -62,16 +63,18 @@ class QuestionGeneratorService:
             template_result = await session.execute(template_stmt)
             template = template_result.scalar_one_or_none()
             
-            # Get number of technical questions from template config
+            # Get number of technical questions and source from template config
             num_technical_questions = 6  # Default
+            question_source = "ai_generated" # Default
             if template:
                 technical_config = template.technical_config or {}
                 if isinstance(technical_config, dict):
-                    # Count total questions from difficulty distribution
-                    difficulty_dist = technical_config
-                    if any(k.lower() in ["easy", "medium", "hard"] for k in difficulty_dist.keys()):
-                        num_technical_questions = sum(v for v in difficulty_dist.values() if isinstance(v, int))
-                    else:
+                    question_source = technical_config.get("question_source", "ai_generated")
+                    # Count total questions from difficulty distribution (only easy, medium, hard)
+                    difficulty_keys = ["easy", "medium", "hard"]
+                    num_technical_questions = sum(v for k, v in technical_config.items() if k.lower() in difficulty_keys and isinstance(v, int))
+                    
+                    if num_technical_questions == 0:
                         num_technical_questions = technical_config.get("total_questions", 6)
                 # Fallback to settings if technical_config not available
                 elif template.settings and isinstance(template.settings, dict):
@@ -81,6 +84,7 @@ class QuestionGeneratorService:
             
             print(f"\n📋 Template Configuration:")
             print(f"   Number of technical questions: {num_technical_questions}")
+            print(f"   Question source: {question_source}")
             
             # Step 1: Prepare resume and JD data
             print("\n📄 Step 1: Preparing resume and JD data...")
@@ -198,88 +202,99 @@ class QuestionGeneratorService:
             print(f"[QuestionGenerator] Skills from JD: {jd_skills}")
             print(f"[QuestionGenerator] Combined Skills: {all_skills}")
             
-            # Step 2: Generate technical questions using LLM ONLY (skip question bank)
+            # Step 2: Generate technical questions based on source
             print("\n" + "="*80)
-            print("🔍 GENERATING TECHNICAL QUESTIONS FOR INTERVIEW (at scheduling time)")
+            print("🔍 GENERATING TECHNICAL QUESTIONS FOR INTERVIEW")
             print("="*80)
-            print(f"📋 Template ID: {template_id}")
-            print(f"👤 Candidate ID: {candidate_id}")
-            print(f"🎯 Role: {role_name}")
-            print(f"💼 Skills from Resume: {resume_skills}")
-            print(f"📝 Skills from JD: {jd_skills}")
-            print(f"🔗 Combined Skills: {all_skills}")
-            print("-"*80)
-            print(f"🤖 Generating {num_technical_questions} technical questions using LLM (Azure OpenAI)...")
-            print(f"   ⚠️  Skipping question bank - using LLM only")
             
-            # Generate technical questions using LLM only
             technical_questions = []
-            print(f"   🔧 Attempting LLM generation with {len(all_skills)} skills...")
-            print(f"   📊 Resume skills: {resume_skills[:10] if resume_skills else 'None'}")
-            print(f"   📋 JD skills: {jd_skills[:10] if jd_skills else 'None'}")
-            print(f"   🎯 Role: {role_name}")
-            print(f"   🔢 Number of questions to generate: {num_technical_questions}")
             
-            # Check if Azure OpenAI is available
-            from app.services.azure_openai_service import azure_openai_service
-            if not azure_openai_service.client:
-                print(f"   ⚠️  WARNING: Azure OpenAI client not initialized!")
-                print(f"   ⚠️  Check AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env file")
-                print(f"   ⚠️  Will use mock questions as fallback")
-            else:
-                print(f"   ✅ Azure OpenAI client is initialized and ready")
-            
-            try:
-                technical_questions = await QuestionGeneratorService._generate_questions_with_llm(
+            if question_source == "question_bank":
+                print(f"📚 Fetching {num_technical_questions} questions from bank...")
+                technical_questions = await QuestionGeneratorService._get_questions_from_bank(
+                    session=session,
                     num_questions=num_technical_questions,
-                    skills=all_skills,
                     role_name=role_name,
-                resume_data=resume_data,
-                    jd_data=jd_data
+                    required_skills=all_skills,
+                    resume_skills=resume_skills,
+                    jd_skills=jd_skills
                 )
-                # Ensure LLM generated questions
-                if not technical_questions or len(technical_questions) == 0:
-                    print(f"   ⚠️  LLM generation returned empty, using mock questions")
+                if not technical_questions:
+                    print("   ⚠️ No questions found in bank, falling back to LLM")
+                    question_source = "ai_generated" # Fallback to AI if bank is empty
+            
+            if question_source == "ai_generated" or not technical_questions:
+                print(f"🤖 Generating {num_technical_questions} technical questions using LLM...")
+                # Check if Azure OpenAI is available
+                from app.services.azure_openai_service import azure_openai_service
+                if not azure_openai_service.client:
+                    print(f"   ⚠️  WARNING: Azure OpenAI client not initialized!")
+                    print(f"   ⚠️  Check AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env file")
+                    print(f"   ⚠️  Will use mock questions as fallback")
+                else:
+                    print(f"   ✅ Azure OpenAI client is initialized and ready")
+                
+                try:
+                    technical_questions = await QuestionGeneratorService._generate_questions_with_llm(
+                        num_questions=num_technical_questions,
+                        skills=all_skills,
+                        role_name=role_name,
+                        resume_data=resume_data,
+                        jd_data=jd_data
+                    )
+                    # Ensure LLM generated questions
+                    if not technical_questions or len(technical_questions) == 0:
+                        print(f"   ⚠️  LLM generation returned empty, using mock questions")
+                        technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
+                            num_questions=num_technical_questions,
+                            skills=all_skills,
+                            role_name=role_name
+                        )
+                    else:
+                        print(f"   ✅ LLM successfully generated {len(technical_questions)} technical questions")
+                        if technical_questions:
+                            print(f"   📝 Sample question: {technical_questions[0].get('prompt', 'N/A')[:80]}...")
+                            print(f"   📝 All generated questions:")
+                            for i, q in enumerate(technical_questions, 1):
+                                print(f"      {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:60]}...")
+                except Exception as llm_error:
+                    logger.error(f"LLM question generation failed: {llm_error}", exc_info=True)
+                    print(f"   ❌ LLM generation failed: {llm_error}")
+                    print(f"   Error type: {type(llm_error).__name__}")
+                    import traceback
+                    print(f"   Traceback: {traceback.format_exc()}")
+                    print(f"   Using mock questions instead...")
                     technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                         num_questions=num_technical_questions,
                         skills=all_skills,
                         role_name=role_name
                     )
-                else:
-                    print(f"   ✅ LLM successfully generated {len(technical_questions)} technical questions")
-                    if technical_questions:
-                        print(f"   📝 Sample question: {technical_questions[0].get('prompt', 'N/A')[:80]}...")
-                        print(f"   📝 All generated questions:")
-                        for i, q in enumerate(technical_questions, 1):
-                            print(f"      {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:60]}...")
-            except Exception as llm_error:
-                logger.error(f"LLM question generation failed: {llm_error}", exc_info=True)
-                print(f"   ❌ LLM generation failed: {llm_error}")
-                print(f"   Error type: {type(llm_error).__name__}")
-                import traceback
-                print(f"   Traceback: {traceback.format_exc()}")
-                print(f"   Using mock questions instead...")
+
+            # If still no questions, use mock fallback
+            if not technical_questions:
+                print("   ⚠️ LLM/Bank failed, using mock questions")
                 technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                     num_questions=num_technical_questions,
                     skills=all_skills,
                     role_name=role_name
                 )
             
-            # Mark all as static questions (technical questions use 'static' type)
+            # Mark metadata
             for q in technical_questions:
-                q['question_type'] = 'static'  # Schema expects 'static', 'conversational', or 'coding'
-                q['source'] = 'llm_generated'
-                q['evaluation_mode'] = q.get('evaluation_mode', 'text')  # Ensure evaluation_mode is set
+                q['question_type'] = q.get('question_type', 'static')
+                q['source'] = q.get('source', 'llm_generated' if question_source == "ai_generated" else "question_bank")
+                q['evaluation_mode'] = q.get('evaluation_mode', 'text')
             
-            print(f"\n✅ Generated {len(technical_questions)} technical questions using LLM:")
+            # Ensure proper ordering
+            for idx, q in enumerate(technical_questions, 1):
+                q['order'] = idx
+            all_questions.extend(technical_questions)
+            
+            print(f"\n✅ Generated {len(technical_questions)} technical questions:")
             for i, q in enumerate(technical_questions, 1):
                 print(f"   {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:100]}...")
                 print(f"      Source: {q.get('source', 'llm_generated')} | Type: {q.get('question_type', 'technical')}")
             
-            # Ensure proper ordering for technical questions
-            for idx, q in enumerate(technical_questions, 1):
-                q['order'] = idx
-            all_questions.extend(technical_questions)
             
             # CRITICAL CHECK: Ensure we have at least some questions before proceeding
             if len(all_questions) == 0:
@@ -337,6 +352,22 @@ class QuestionGeneratorService:
                 logger.error("❌ CRITICAL: Still no questions after emergency fallback!")
                 raise ValueError("Failed to generate any questions. All fallback mechanisms failed.")
             
+            # Step 3: Fetch coding problems if configured
+            coding_problems_formatted = []
+            if template and template.coding_config:
+                from app.services.template_engine import template_engine
+                coding_items = await template_engine._generate_coding_questions(template, session)
+                for item in coding_items:
+                    if item.coding_problem:
+                        p = item.coding_problem
+                        coding_problems_formatted.append({
+                            "problem_id": str(p.id),
+                            "title": p.title,
+                            "difficulty": p.difficulty,
+                            "description": p.description,
+                            "starter_code": p.starter_code
+                        })
+            
             return {
                 "template_id": template_id,
                 "generated_from": {
@@ -345,7 +376,9 @@ class QuestionGeneratorService:
                 },
                 "generated_at": datetime.utcnow().isoformat() + "Z",
                 "generation_method": "question_bank_and_azure_openai_gpt4o",
-                "questions": all_questions
+                "technical_section": {"questions": all_questions},
+                "coding_section": {"problems": coding_problems_formatted},
+                "conversational_section": {"rounds": (template.conversational_config or {}).get("rounds", 0) if template else 0}
             }
         except Exception as e:
             logger.error(f"Error generating questions: {e}", exc_info=True)
@@ -654,7 +687,7 @@ REQUIRED SKILLS:
 
 INSTRUCTIONS:
 1. Generate questions that test knowledge of these specific skills: {skills_text}
-2. Mix difficulties: 1-2 easy, 2-3 medium, 2-3 hard
+2. Mix easy, medium, and hard difficulties as appropriate
 3. Questions should be technical and relevant to the skills mentioned
 4. Each question should focus on a specific skill or technology
 5. Return exactly {num_questions} questions
@@ -1046,75 +1079,241 @@ Return ONLY the JSON object."""
                 "jd_id": "fallback",
             },
             "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.utcnow().isoformat() + "Z",
             "generation_method": "fallback_mock",
-            "questions": [
-                {
-                    "question_id": "conv_q_001",
-                    "question_type": "conversational",
-                    "order": 1,
-                    "prompt": "Tell me about a challenging project you worked on. What technologies did you use?",
-                    "difficulty": "medium",
-                    "time_limit_sec": 300,
-                    "conversation_config": {
-                        "follow_up_depth": 2,
-                        "ai_model": "gpt-4o",
-                        "evaluation_mode": "contextual"
+            "technical_section": {
+                "questions": [
+                    {
+                        "question_id": "conv_q_001",
+                        "question_type": "technical",
+                        "order": 1,
+                        "prompt": "Tell me about a challenging project you worked on. What technologies did you use?",
+                        "text": "Tell me about a challenging project you worked on. What technologies did you use?",
+                        "difficulty": "medium",
+                        "category": "GENERAL",
+                        "time_limit_sec": 300
+                    },
+                    {
+                        "question_id": "conv_q_002",
+                        "question_type": "technical",
+                        "order": 2,
+                        "prompt": "Walk me through your approach to solving a complex technical problem.",
+                        "text": "Walk me through your approach to solving a complex technical problem.",
+                        "difficulty": "medium",
+                        "category": "GENERAL",
+                        "time_limit_sec": 300
                     }
-                },
-                {
-                    "question_id": "conv_q_002",
-                    "question_type": "conversational",
-                    "order": 2,
-                    "prompt": "Walk me through your approach to solving a complex technical problem.",
-                    "difficulty": "medium",
-                    "time_limit_sec": 300,
-                    "conversation_config": {
-                        "follow_up_depth": 2,
-                        "ai_model": "gpt-4o",
-                        "evaluation_mode": "contextual"
-                    }
-                },
-                {
-                    "question_id": "conv_q_003",
-                    "question_type": "conversational",
-                    "order": 3,
-                    "prompt": "Deep dive into the architecture of your most complex project. What were the main challenges?",
-                    "difficulty": "hard",
-                    "time_limit_sec": 600,
-                    "conversation_config": {
-                        "follow_up_depth": 3,
-                        "ai_model": "gpt-4o",
-                        "evaluation_mode": "contextual"
-                    }
-                },
-                {
-                    "question_id": "conv_q_004",
-                    "question_type": "conversational",
-                    "order": 4,
-                    "prompt": "Explain how you would optimize a system for scalability and performance.",
-                    "difficulty": "hard",
-                    "time_limit_sec": 600,
-                    "conversation_config": {
-                        "follow_up_depth": 3,
-                        "ai_model": "gpt-4o",
-                        "evaluation_mode": "contextual"
-                    }
-                },
-                {
-                    "question_id": "conv_q_005",
-                    "question_type": "conversational",
-                    "order": 5,
-                    "prompt": "If you had to redesign a system you built, what would you do differently and why?",
-                    "difficulty": "hard",
-                    "time_limit_sec": 600,
-                    "conversation_config": {
-                        "follow_up_depth": 3,
-                        "ai_model": "gpt-4o",
-                        "evaluation_mode": "contextual"
-                    }
-                }
-            ]
+                ]
+            },
+            "coding_section": {"problems": []},
+            "conversational_section": {"rounds": 2}
         }
+
+    @staticmethod
+    async def _regenerate_single_question_with_llm(
+        existing_question: Dict[str, Any],
+        all_questions: List[Dict[str, Any]],
+        comment: Optional[str],
+        skills: List[str],
+        role_name: Optional[str] = None,
+        resume_data: Optional[Dict[str, Any]] = None,
+        jd_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Regenerate a single technical question using LLM.
+        Passes all current questions to prevent duplicates.
+        """
+        try:
+            import json
+            import re
+            import uuid
+            
+            logger.info(f"[QuestionGenerator] Regenerating single question with comment: {comment}")
+            
+            if not azure_openai_service.client:
+                # Fallback to a mock question if no LLM
+                return {
+                    **existing_question,
+                    "prompt": f"NEW: {existing_question.get('prompt')} (Regenerated due to: {comment})",
+                    "question_id": str(uuid.uuid4())
+                }
+
+            # Build context
+            current_questions_text = "\n".join([f"- {q.get('prompt')}" for q in all_questions])
+            
+            system_prompt = """You are an expert technical interviewer. Your task is to REGENERATE a single technical interview question.
+You MUST ensure the new question is DIFFERENT from the ones already in the interview to avoid redundancy.
+Return ONLY a valid JSON object with this exact structure:
+{
+    "question": "Question text here",
+    "difficulty": "easy" or "medium" or "hard",
+    "category": "PYTHON" or "SQL" or "MACHINE_LEARNING" or "DATA_STRUCTURES" or "SYSTEM_DESIGN" or "STATISTICS",
+    "focus": "Brief description of what this question tests"
+}"""
+
+            user_prompt = f"""Regenerate this specific interview question:
+"{existing_question.get('prompt')}"
+
+USER'S INSTRUCTION/COMMENT FOR REGENERATION:
+"{comment or 'Make it more specific and technically challenging'}"
+
+CURRENT QUESTIONS IN THE INTERVIEW (AVOID DUPLICATING THESE):
+{current_questions_text}
+
+TARGET SKILLS:
+{', '.join(skills[:20])}
+
+ROLE: {role_name or 'Technical Candidate'}
+
+Return ONLY the JSON object."""
+
+            response = azure_openai_service.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=800,
+                response_format={"type": "json_object"}
+            )
+            
+            content = response.choices[0].message.content
+            llm_q = json.loads(content)
+            
+            # Map values back to our schema
+            difficulty = llm_q.get('difficulty', existing_question.get('difficulty', 'medium')).lower()
+            category_str = llm_q.get('category', existing_question.get('category', 'PYTHON')).upper()
+            
+            try:
+                category = CategoryEnum[category_str]
+            except KeyError:
+                category = CategoryEnum.PYTHON
+                
+            time_limits = {'easy': 120, 'medium': 240, 'hard': 360}
+            
+            return {
+                "question_id": str(uuid.uuid4()),
+                "question_type": "static",
+                "order": existing_question.get("order", 1),
+                "prompt": llm_q.get("question", ""),
+                "difficulty": difficulty,
+                "time_limit_sec": time_limits.get(difficulty, 240),
+                "answer_mode": existing_question.get("answer_mode", "text"),
+                "evaluation_mode": existing_question.get("evaluation_mode", "text"),
+                "source": "llm_regenerated",
+                "category": category.value,
+                "focus": llm_q.get("focus", "")
+            }
+            
+        except Exception as e:
+            logger.error(f"Error regenerating single question with LLM: {e}")
+            return {
+                **existing_question,
+                "prompt": f"FALLBACK: {existing_question.get('prompt')} (Regeneration failed)",
+                "source": "regeneration_failed"
+            }
+
+    @staticmethod
+    async def _get_single_replacement_question_from_bank(
+        session: AsyncSession,
+        exclude_ids: List[str],
+        skills: List[str],
+        difficulty: str
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch a single unique replacement question from the bank."""
+        try:
+            import random
+            from sqlalchemy import or_
+            import uuid as uuid_module
+            
+            # Use the same logic as _get_questions_from_bank but exclude existing IDs
+            # and limit to 1
+            stmt = select(Question).where(
+                Question.is_active == True,
+                Question.id.notin_([uuid_module.UUID(i) for i in exclude_ids if i and len(i) == 36])
+            )
+            
+            # Try to match difficulty if possible
+            # ... (omitting full skill mapping logic for brevity, reusing it if possible) ...
+            # Actually, let's keep it simple for now or refactor _get_questions_from_bank to be more reusable.
+            # For a single replacement, we can just call _get_questions_from_bank with num=1 and filter later,
+            # but that's inefficient.
+            
+            # Let's reuse some of the filter logic
+            result = await session.execute(stmt.limit(20)) # Get a small pool
+            available = result.scalars().all()
+            
+            if not available:
+                return None
+                
+            q = random.choice(available)
+            
+            # Format
+            difficulty_val = q.difficulty.value.lower() if hasattr(q.difficulty, 'value') else "medium"
+            time_limits = {'easy': 120, 'medium': 240, 'hard': 360}
+            
+            import random as rnd
+            category_val = q.category.value if hasattr(q.category, 'value') else "PYTHON"
+            if category_val in ["SQL", "DATA_STRUCTURES"]:
+                answer_mode = "code"
+            else:
+                answer_mode = rnd.choice(["audio", "text"])
+
+            return {
+                "question_id": str(q.id),
+                "question_type": "static",
+                "order": 1, # Will be overridden by caller
+                "prompt": q.text,
+                "difficulty": difficulty_val,
+                "time_limit_sec": time_limits.get(difficulty_val, 240),
+                "answer_mode": answer_mode,
+                "evaluation_mode": "text" if answer_mode == "text" else ("code" if answer_mode == "code" else "audio"),
+                "source": "question_bank",
+                "category": category_val
+            }
+        except Exception as e:
+            logger.error(f"Error getting single replacement question from bank: {e}")
+            return None
+
+    @staticmethod
+    async def _get_single_replacement_coding_problem_from_bank(
+        session: AsyncSession,
+        exclude_ids: List[str],
+        difficulties: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch a single unique replacement coding problem from the bank."""
+        try:
+            import random
+            import uuid as uuid_module
+            
+            valid_diffs = [d.upper() for d in difficulties if isinstance(d, str)]
+            
+            stmt = select(CodingProblem).where(
+                CodingProblem.id.notin_([uuid_module.UUID(i) for i in exclude_ids if i and len(i) == 36])
+            )
+            
+            if valid_diffs:
+                stmt = stmt.where(func.upper(CodingProblem.difficulty).in_(valid_diffs))
+            
+            result = await session.execute(stmt.limit(10))
+            available = result.scalars().all()
+            
+            if not available:
+                return None
+                
+            p = random.choice(available)
+            
+            return {
+                "coding_problem_id": str(p.id),
+                "title": p.title,
+                "difficulty": p.difficulty,
+                "description": p.description,
+                "starter_code": p.starter_code
+            }
+        except Exception as e:
+            logger.error(f"Error getting single replacement coding problem from bank: {e}")
+            return None
 
 
 question_generator_service = QuestionGeneratorService()

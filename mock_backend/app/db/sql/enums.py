@@ -5,6 +5,7 @@ class UserRole(str, enum.Enum):
     CANDIDATE = "candidate"
 
 class InterviewStatus(str, enum.Enum):
+    DRAFT = "draft"
     SCHEDULED = "scheduled"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
