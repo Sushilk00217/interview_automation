@@ -20,6 +20,7 @@ class CodingSectionProblemPreview(BaseModel):
     problem_id: uuid.UUID
     title: str
     difficulty: str
+    starter_code: Optional[dict] = None
 
 class CodingSectionPreview(BaseModel):
     problems: List[CodingSectionProblemPreview]

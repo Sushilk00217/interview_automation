@@ -243,42 +243,6 @@ async def get_interview_summary(
     }
 
 
-@router.post(
-    "/schedule",
-    response_model=ScheduleInterviewResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Schedule a new interview for a candidate",
-)
-async def schedule_interview(
-    request: ScheduleInterviewRequest,
-    current_admin: User = Depends(get_current_admin),
-    session: AsyncSession = Depends(get_db_session),
-):
-    template_id = validate_uuid(request.template_id)
-    candidate_id = validate_uuid(request.candidate_id)
-    draft_interview_id = validate_uuid(request.draft_interview_id) if request.draft_interview_id else None
-    
-    interview = await InterviewAdminSQLService.create_interview(
-        session=session,
-        template_id=template_id,
-        candidate_id=candidate_id,
-        assigned_by=current_admin.id,
-        scheduled_at=request.scheduled_at,
-        questions=request.questions,
-        draft_interview_id=draft_interview_id
-    )
-    
-    return {
-        "id": str(interview.id),
-        "candidate_id": str(interview.candidate_id),
-        "template_id": str(interview.template_id),
-        "assigned_by": str(interview.assigned_by),
-        "status": interview.status.value if isinstance(interview.status, InterviewStatus) else interview.status,
-        "scheduled_at": interview.scheduled_at,
-        "curated_questions": interview.curated_questions,
-        "created_at": interview.created_at,
-    }
-
 @router.put(
     "/{interview_id}/reschedule",
     response_model=RescheduleInterviewResponse,

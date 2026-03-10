@@ -80,7 +80,7 @@ class CodingProblemItem(BaseModel):
     title: str
     difficulty: str
     description: Optional[str] = None
-    starter_code: Optional[str] = None
+    starter_code: Optional[dict] = None
 
 class CodingSection(BaseModel):
     problems: List[CodingProblemItem]
