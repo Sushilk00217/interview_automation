@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.sql.models.interview_template import InterviewTemplate
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,8 @@ async def seed_templates(session: AsyncSession):
                 "easy": 2,
                 "medium": 2,
                 "hard": 1,
-                "duration_minutes": 20
+                "duration_minutes": 20,
+                "question_source": "ai_generated"
             },
             "coding_config": {
                 "count": 1,
@@ -39,7 +41,8 @@ async def seed_templates(session: AsyncSession):
                 "easy": 1,
                 "medium": 3,
                 "hard": 2,
-                "duration_minutes": 30
+                "duration_minutes": 30,
+                "question_source": "ai_generated"
             },
             "coding_config": {
                 "count": 2,
@@ -62,7 +65,8 @@ async def seed_templates(session: AsyncSession):
                 "easy": 2,
                 "medium": 2,
                 "hard": 1,
-                "duration_minutes": 25
+                "duration_minutes": 25,
+                "question_source": "ai_generated"
             },
             "coding_config": {
                 "count": 1,
@@ -85,7 +89,8 @@ async def seed_templates(session: AsyncSession):
                 "easy": 1,
                 "medium": 4,
                 "hard": 2,
-                "duration_minutes": 35
+                "duration_minutes": 35,
+                "question_source": "ai_generated"
             },
             "coding_config": {
                 "count": 1,
