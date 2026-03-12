@@ -9,6 +9,10 @@ on:
       - ".github/workflows/backend-appservice.yml"
   workflow_dispatch:
 
+# Opt-in to Node.js 24 now (removes Node.js 20 deprecation warnings)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,11 +33,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      # Optional: Add tests here if you have
-      # - name: Run tests
-      #   working-directory: mock_backend
-      #   run: pytest -q
 
       - name: Create deployment package (zip mock_backend only)
         run: |
