@@ -11,7 +11,8 @@ interface ConnectParams {
 class AnswerWebSocket {
     private _ws: WebSocket | null = null;
     private questionId: string | null = null;
-    
+    private _audioChunkCount = 0;
+
     get ws(): WebSocket | null {
         return this._ws;
     }
@@ -84,8 +85,7 @@ class AnswerWebSocket {
         if (this._ws && this._ws.readyState === WebSocket.OPEN) {
             try {
                 this._ws.send(data);
-                // Log every 10th chunk to avoid spam
-                if (!this._audioChunkCount) this._audioChunkCount = 0;
+                // counter is now explicitly declared in class
                 this._audioChunkCount++;
                 if (this._audioChunkCount % 10 === 0) {
                     console.log(`[AnswerWebSocket] Sent ${this._audioChunkCount} audio chunks`);
@@ -120,6 +120,7 @@ class AnswerWebSocket {
             this._ws = null;
         }
         this.questionId = null;
+        this._audioChunkCount = 0;
     }
 }
 
