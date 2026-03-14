@@ -73,15 +73,16 @@ class ReportGenerationService:
         if not interview_session:
             raise ValueError(f"Interview session not found for interview {interview_id}")
         
-        # Get all responses with questions
+        # Get all questions and their responses (including those without responses)
         responses_stmt = (
             select(InterviewResponse, InterviewSessionQuestion)
-            .join(
-                InterviewSessionQuestion,
-                InterviewResponse.question_id == InterviewSessionQuestion.id
+            .select_from(InterviewSessionQuestion)
+            .outerjoin(
+                InterviewResponse,
+                InterviewSessionQuestion.id == InterviewResponse.question_id
             )
-            .where(InterviewResponse.session_id == interview_session.id)
-            .order_by(InterviewResponse.submitted_at)
+            .where(InterviewSessionQuestion.interview_session_id == interview_session.id)
+            .order_by(InterviewSessionQuestion.order)
         )
         responses_result = await session.execute(responses_stmt)
         responses_data = responses_result.all()
@@ -94,9 +95,13 @@ class ReportGenerationService:
         candidate_profile = candidate_result.scalar_one_or_none()
         
         # Calculate statistics
-        all_scores = [r[0].ai_score for r in responses_data if r[0].ai_score is not None]
+        # Assign 0.0 for unattempted questions
+        all_scores = [r[0].ai_score if r[0] and r[0].ai_score is not None else 0.0 for r in responses_data]
         avg_raw = sum(all_scores) / len(all_scores) if all_scores else 0.0
         average_score = avg_raw * 10.0  # Convert 0-10 to 0-100
+        
+        # Max/Min should probably only consider attempted questions or stay as is
+        # If we include 0s, min will likely be 0.
         max_score = max(all_scores) * 10.0 if all_scores else 0.0
         min_score = min(all_scores) * 10.0 if all_scores else 0.0
         
@@ -104,7 +109,7 @@ class ReportGenerationService:
         strengths = []
         weaknesses = []
         for resp, q in responses_data:
-            if resp.evaluation_json:
+            if resp and resp.evaluation_json:
                 eval_data = resp.evaluation_json
                 if isinstance(eval_data, dict):
                     strengths.extend(eval_data.get('strengths', []))
@@ -116,7 +121,7 @@ class ReportGenerationService:
         
         # Generate recommendation
         recommendation = ReportGenerationService._generate_recommendation(
-            avg_raw, unique_strengths, unique_weaknesses
+            average_score, unique_strengths, unique_weaknesses
         )
         
         # Build question-by-question breakdown
@@ -127,12 +132,12 @@ class ReportGenerationService:
                 "question_id": str(q.id),
                 "question_text": question_text,
                 "question_type": getattr(q, "question_type", "technical"),
-                "answer_text": resp.answer_text or "Audio answer",
-                "score": resp.ai_score * 10.0 if resp.ai_score is not None else 0.0,
-                "feedback": resp.ai_feedback,
-                "strengths": resp.evaluation_json.get('strengths', []) if resp.evaluation_json else [],
-                "weaknesses": resp.evaluation_json.get('weaknesses', []) if resp.evaluation_json else [],
-                "submitted_at": resp.submitted_at.isoformat() if resp.submitted_at else None
+                "answer_text": resp.answer_text or "Audio answer" if resp else "Not attempted",
+                "score": resp.ai_score * 10.0 if resp and resp.ai_score is not None else 0.0,
+                "feedback": resp.ai_feedback if resp else "No response/evaluation available",
+                "strengths": resp.evaluation_json.get('strengths', []) if resp and resp.evaluation_json and isinstance(resp.evaluation_json, dict) else [],
+                "weaknesses": resp.evaluation_json.get('weaknesses', []) if resp and resp.evaluation_json and isinstance(resp.evaluation_json, dict) else [],
+                "submitted_at": resp.submitted_at.isoformat() if resp and resp.submitted_at else None
             })
         
         # Build report
@@ -146,8 +151,8 @@ class ReportGenerationService:
             "overall_score": round(average_score, 2),
             "max_score": round(max_score, 2),
             "min_score": round(min_score, 2),
-            "total_questions": len(question_breakdown),
-            "answered_questions": len(question_breakdown),
+            "total_questions": len(responses_data),
+            "answered_questions": sum(1 for r in responses_data if r[0] is not None),
             "recommendation": recommendation["decision"],
             "recommendation_reason": recommendation["reason"],
             "strengths": unique_strengths,
@@ -180,18 +185,18 @@ class ReportGenerationService:
         weaknesses: List[str]
     ) -> Dict[str, str]:
         """Generate hiring recommendation based on score and feedback."""
-        if average_score >= 8.0:
+        if average_score >= 80.0:
             decision = "STRONG_HIRE"
-            reason = f"Excellent performance with average score of {average_score:.1f}/10. Candidate demonstrates strong technical knowledge and problem-solving skills."
-        elif average_score >= 6.5:
+            reason = f"Excellent performance with average score of {average_score:.1f}/100. Candidate demonstrates strong technical knowledge and problem-solving skills."
+        elif average_score >= 65.0:
             decision = "HIRE"
-            reason = f"Good performance with average score of {average_score:.1f}/10. Candidate shows solid understanding and potential."
-        elif average_score >= 5.0:
+            reason = f"Good performance with average score of {average_score:.1f}/100. Candidate shows solid understanding and potential."
+        elif average_score >= 50.0:
             decision = "CONSIDER"
-            reason = f"Average performance with score of {average_score:.1f}/10. Candidate shows promise but may need additional evaluation."
+            reason = f"Average performance with score of {average_score:.1f}/100. Candidate shows promise but may need additional evaluation."
         else:
             decision = "NO_HIRE"
-            reason = f"Below average performance with score of {average_score:.1f}/10. Candidate may not meet the required technical standards."
+            reason = f"Below average performance with score of {average_score:.1f}/100. Candidate may not meet the required technical standards."
         
         if strengths:
             reason += f" Key strengths: {', '.join(strengths[:3])}."

@@ -43,9 +43,9 @@ export default function InterviewReportModal({
     };
 
     const getScoreColor = (score: number) => {
-        if (score >= 8) return 'text-green-600';
-        if (score >= 6.5) return 'text-blue-600';
-        if (score >= 5) return 'text-yellow-600';
+        if (score >= 80) return 'text-green-600';
+        if (score >= 65) return 'text-blue-600';
+        if (score >= 50) return 'text-yellow-600';
         return 'text-red-600';
     };
 
@@ -100,7 +100,7 @@ export default function InterviewReportModal({
                                             <span className={`text-4xl font-bold ${getScoreColor(report.overall_score)}`}>
                                                 {report.overall_score.toFixed(1)}
                                             </span>
-                                            <span className="text-gray-500 text-lg">/ 10</span>
+                                            <span className="text-gray-500 text-lg">/ 100</span>
                                         </div>
                                         <p className="text-sm text-gray-600 mt-2">
                                             Answered {report.answered_questions} of {report.total_questions} questions
@@ -168,7 +168,7 @@ export default function InterviewReportModal({
                                                         </span>
                                                         {q.score !== null && (
                                                             <span className={`text-lg font-bold ${getScoreColor(q.score)}`}>
-                                                                {q.score.toFixed(1)}/10
+                                                                {q.score.toFixed(1)}/100
                                                             </span>
                                                         )}
                                                     </div>
