@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useInterviewStore } from '@/store/interviewStore';
+import { API_BASE_URL } from '@/lib/apiClient';
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -78,7 +79,7 @@ export default function SummaryPage() {
             return;
         }
 
-        const base = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+        const base = API_BASE_URL;
         try {
             const res = await fetch(`${base}/api/v1/session/summary`, {
                 headers: {

@@ -8,8 +8,16 @@ import {
     SchedulingApiError,
 } from '@/types/interview';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/apiClient';
+
+const BASE_URL = API_BASE_URL;
 const API_BASE = `${BASE_URL}/api/v1/admin/templates`;
+
+function getAbsoluteUrl(path: string): URL {
+    if (path.startsWith('http')) return new URL(path);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    return new URL(path, origin);
+}
 
 // ─── Auth token helper ────────────────────────────────────────────────────────
 
@@ -49,7 +57,7 @@ async function parseError(res: Response): Promise<SchedulingApiError> {
 // ─── API Functions ───────────────────────────────────────────────────────────
 
 export const getTemplates = async (params?: { role?: string; active_only?: boolean }): Promise<InterviewTemplate[]> => {
-    const url = new URL(API_BASE);
+    const url = getAbsoluteUrl(API_BASE);
     if (params?.role) url.searchParams.append('role', params.role);
     if (params?.active_only !== undefined) url.searchParams.append('active_only', String(params.active_only));
 
@@ -89,7 +97,7 @@ export const deleteTemplate = async (id: string): Promise<void> => {
 };
 
 export const toggleTemplateActive = async (id: string, isActive: boolean): Promise<InterviewTemplate> => {
-    const url = new URL(`${API_BASE}/${id}/activate`);
+    const url = getAbsoluteUrl(`${API_BASE}/${id}/activate`);
     url.searchParams.append('is_active', String(isActive));
 
     const res = await fetch(url.toString(), {

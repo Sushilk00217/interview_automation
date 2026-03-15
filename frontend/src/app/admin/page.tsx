@@ -11,6 +11,7 @@ import {
     InterviewSummaryItem,
     SchedulingApiError,
 } from '@/lib/api/interviews';
+import { API_BASE_URL } from '@/lib/apiClient';
 import { CandidateResponse } from '@/types/api';
 import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
@@ -149,7 +150,7 @@ export default function AdminDashboardPage() {
     const fetchStats = async () => {
         setStatsLoading(true);
         try {
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+            const baseUrl = API_BASE_URL;
             const currentToken = useAuthStore.getState().token;
             const authHeader: Record<string, string> = currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {};
 
@@ -176,7 +177,7 @@ export default function AdminDashboardPage() {
         setCandidatesLoading(true);
         setError('');
         try {
-            const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+            const baseUrl = API_BASE_URL;
             const currentToken = useAuthStore.getState().token;
             const authHeader: Record<string, string> = currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {};
 

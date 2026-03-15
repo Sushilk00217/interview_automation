@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { API_BASE_URL } from "@/lib/apiClient";
 import { persist } from "zustand/middleware";
 import { authService } from "@/lib/authService";
 import { AuthRequest } from "@/types/api";
@@ -64,7 +65,7 @@ export const useAuthStore = create<AuthState>()(
                         } else if (errorMsg.includes("not a candidate") || errorMsg.includes("not an admin")) {
                             message = "Access denied. Please use the correct login portal.";
                         } else if (errorMsg.includes("fetch") || errorMsg.includes("network") || errorMsg.includes("backend server")) {
-                            message = "Unable to connect to the server. Please ensure the backend is running at http://localhost:8000";
+                            message = `Unable to connect to the server. Please ensure the backend is running at ${API_BASE_URL}`;
                         } else if (errorCode === "NETWORK_ERROR" || errorCode === "INVALID_RESPONSE") {
                             message = errorMessage || "Unable to connect. Please try again later.";
                         } else if (errorCode === "VALIDATION_ERROR") {

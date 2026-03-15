@@ -1,8 +1,6 @@
-/**
- * verification.ts — API helpers for candidate verification (face, voice samples)
- */
+import { API_BASE_URL } from "@/lib/apiClient";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const BASE_URL = API_BASE_URL;
 
 function getToken(): string | null {
     if (typeof window === 'undefined') return null;

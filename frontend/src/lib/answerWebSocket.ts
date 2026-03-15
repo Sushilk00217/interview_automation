@@ -1,3 +1,5 @@
+import { getWSBaseURL } from "./apiClient";
+
 interface ConnectParams {
     questionId: string;
     onOpen: () => void;
@@ -27,12 +29,8 @@ class AnswerWebSocket {
         this.questionId = questionId;
         this._audioChunkCount = 0;
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-        const wsUrl = baseUrl
-            .replace(/^https:/, "wss:")
-            .replace(/^http:/, "ws:");
-
-        const fullUrl = `${wsUrl}/api/v1/answer/ws`;
+        const wsBase = getWSBaseURL();
+        const fullUrl = `${wsBase}/v1/answer/ws`;
         console.log(`[AnswerWebSocket] Connecting to: ${fullUrl}`);
         this._ws = new WebSocket(fullUrl);
 
