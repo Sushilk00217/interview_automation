@@ -11,7 +11,7 @@ import Timer from "./Timer";
 import VideoFeed from "./VideoFeed";
 import { useProctoring } from "@/hooks/useProctoring";
 import { azureTTS } from "@/lib/azureTTS";
-import { apiClient } from "@/lib/apiClient";
+import { apiClient, API_BASE_URL } from "@/lib/apiClient";
 import { useEffect as useEffectImport } from "react";
 
 export default function InterviewShell() {
@@ -149,7 +149,7 @@ export default function InterviewShell() {
                                 ? JSON.parse(localStorage.getItem("auth-storage") || "{}")?.state?.token
                                 : null;
 
-                            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/v1/verification/verify-face`, {
+                            const response = await fetch(`${API_BASE_URL}/api/v1/verification/verify-face`, {
                                 method: "POST",
                                 headers: token ? {
                                     "Authorization": `Bearer ${token}`,

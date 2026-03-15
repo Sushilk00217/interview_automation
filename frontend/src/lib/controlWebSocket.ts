@@ -1,3 +1,5 @@
+import { getWSBaseURL } from "./apiClient";
+
 interface ConnectParams {
     interviewId: string;
     candidateToken: string;
@@ -19,16 +21,8 @@ class ControlWebSocket {
             this.disconnect();
         }
 
-        // Get base URL - default to localhost if not set
-        let baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-        baseUrl = baseUrl.replace(/\/$/, "");
-        
-        // Convert HTTP/HTTPS to WS/WSS
-        const wsUrl = baseUrl
-            .replace(/^https:/, "wss:")
-            .replace(/^http:/, "ws:");
-
-        const fullUrl = `${wsUrl}/api/v1/proctoring/ws`;
+        const wsBase = getWSBaseURL();
+        const fullUrl = `${wsBase}/v1/proctoring/ws`;
         console.log(`[ControlWebSocket] Connecting to: ${fullUrl}`);
         
         try {

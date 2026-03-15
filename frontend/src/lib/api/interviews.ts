@@ -19,8 +19,15 @@ import {
 // Re-export so consumers can import from this module
 export type { SchedulingApiError };
 
-const BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/apiClient';
+
+const BASE_URL = API_BASE_URL;
+
+function getAbsoluteUrl(path: string): URL {
+    if (path.startsWith('http')) return new URL(path);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    return new URL(path, origin);
+}
 
 // ─── Auth token helper ────────────────────────────────────────────────────────
 
@@ -63,7 +70,7 @@ export async function previewTemplate(
     templateId: string,
     candidateId?: string
 ): Promise<TemplatePreviewResponse> {
-    const url = new URL(`${BASE_URL}/api/v1/admin/interviews/templates/${templateId}/preview`);
+    const url = getAbsoluteUrl(`${BASE_URL}/api/v1/admin/interviews/templates/${templateId}/preview`);
     if (candidateId) {
         url.searchParams.append('candidate_id', candidateId);
     }

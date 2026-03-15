@@ -33,7 +33,9 @@ export interface CodeSubmitResponse {
     state?: string
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+import { API_BASE_URL } from "@/lib/apiClient";
+
+const BASE_URL = API_BASE_URL;
 
 export async function runCode(payload: {
     problem_id: string

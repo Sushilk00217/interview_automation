@@ -2,9 +2,23 @@ import { ApiError } from "@/types/api";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 
-function getBaseURL(): string {
+export const API_BASE_URL = (function getBaseURL(): string {
     const url = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_BASE_URL : undefined;
-    return (url && url.trim() !== "") ? url.replace(/\/$/, "") : DEFAULT_API_BASE_URL;
+    return (url && url.trim() !== "") ? url.replace(/\/+$/, "") : DEFAULT_API_BASE_URL;
+})();
+
+/**
+ * Gets the absolute WebSocket base URL.
+ */
+export function getWSBaseURL(): string {
+    if (API_BASE_URL.startsWith('/')) {
+        if (typeof window !== 'undefined') {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${protocol}//${window.location.host}${API_BASE_URL}`;
+        }
+        return `ws://localhost:8000${API_BASE_URL}`;
+    }
+    return API_BASE_URL.replace(/^http/, 'ws');
 }
 
 class ApiClient {
@@ -403,10 +417,9 @@ class ApiClient {
     }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
 if (!process.env.NEXT_PUBLIC_API_BASE_URL) {
-    console.warn('[ApiClient] NEXT_PUBLIC_API_BASE_URL not set, using default: http://localhost:8000');
+    console.warn(`[ApiClient] NEXT_PUBLIC_API_BASE_URL not set, using default: ${DEFAULT_API_BASE_URL}`);
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

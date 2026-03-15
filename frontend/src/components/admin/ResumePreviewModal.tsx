@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CandidateResponse } from '@/types/api';
 import { useAuthStore } from '@/store/authStore';
+import { API_BASE_URL } from '@/lib/apiClient';
 
 interface ResumePreviewModalProps {
     candidate: CandidateResponse;
@@ -32,8 +33,7 @@ export default function ResumePreviewModal({ candidate, onClose }: ResumePreview
             return;
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-        const url = `${baseUrl}/api/v1/auth/admin/candidates/${candidate.id}/resume-file`;
+        const url = `${API_BASE_URL}/api/v1/auth/admin/candidates/${candidate.id}/resume-file`;
 
         fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
