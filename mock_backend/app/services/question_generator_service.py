@@ -219,11 +219,9 @@ class QuestionGeneratorService:
                     resume_skills=resume_skills,
                     jd_skills=jd_skills
                 )
-                if not technical_questions:
-                    print("   ⚠️ No questions found in bank, falling back to LLM")
-                    question_source = "ai_generated" # Fallback to AI if bank is empty
             
-            if question_source == "ai_generated" or not technical_questions:
+            # Only use LLM if source is AI_GENERATED, or if question_bank was requested but is literally empty
+            if question_source == "ai_generated" or (question_source == "question_bank" and not technical_questions):
                 print(f"🤖 Generating {num_technical_questions} technical questions using LLM...")
                 # Check if Azure OpenAI is available
                 from app.services.azure_openai_service import azure_openai_service
@@ -565,13 +563,25 @@ class QuestionGeneratorService:
             if matching_tags:
                 print(f"   Matching tags: {matching_tags[:10]}")
             
+            # Fallback ladder: if no skill-specific questions found, fetch any active questions
+            if not all_questions:
+                logger.info("[QuestionBank] No skill-specific questions found. Fetching any active questions as fallback.")
+                print("   ⚠️ No skill-specific questions found in bank. Fetching any active questions as fallback.")
+                fallback_stmt = select(Question).where(Question.is_active == True)
+                try:
+                    res = await session.execute(fallback_stmt)
+                    all_questions = res.scalars().all()
+                except Exception as e:
+                    logger.error(f"Fallback bank query failed: {e}")
+                    all_questions = []
+
             # Randomly select questions
-            if len(all_questions) > 0:
-                selected_questions = random.sample(all_questions, min(num_questions, len(all_questions))) if len(all_questions) > num_questions else all_questions
+            if all_questions:
+                selected_questions = random.sample(all_questions, min(num_questions, len(all_questions)))
                 print(f"   Selected {len(selected_questions)} questions from bank for interview")
             else:
                 selected_questions = []
-                print(f"   ⚠️  No questions found in bank - will use LLM/mock fallback")
+                print(f"   ❌ Question bank is completely empty!")
             
             formatted_questions = []
             for i, q in enumerate(selected_questions, 1):
