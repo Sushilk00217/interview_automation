@@ -30,7 +30,7 @@ class AnswerWebSocket {
         this._audioChunkCount = 0;
 
         const wsBase = getWSBaseURL();
-        const fullUrl = `${wsBase}/v1/answer/ws`;
+        const fullUrl = `${wsBase}/api/v1/answer/ws`;
         console.log(`[AnswerWebSocket] Connecting to: ${fullUrl}`);
         this._ws = new WebSocket(fullUrl);
 

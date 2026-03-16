@@ -22,7 +22,7 @@ class ControlWebSocket {
         }
 
         const wsBase = getWSBaseURL();
-        const fullUrl = `${wsBase}/v1/proctoring/ws`;
+        const fullUrl = `${wsBase}/api/v1/proctoring/ws`;
         console.log(`[ControlWebSocket] Connecting to: ${fullUrl}`);
         
         try {

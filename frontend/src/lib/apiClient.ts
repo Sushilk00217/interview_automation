@@ -415,6 +415,43 @@ class ApiClient {
 
         return data as T;
     }
+
+    async delete(path: string): Promise<void> {
+        this.log(`REQUEST: DELETE ${path}`);
+
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+        };
+
+        const token = this.getAuthToken();
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(`${this.baseURL}${path}`, {
+                method: "DELETE",
+                headers,
+            });
+        } catch (error: any) {
+            this.logError(`ERROR: DELETE ${path} - Network error: ${error.message}`);
+            throw error;
+        }
+
+        this.log(`RESPONSE: DELETE ${path} - ${response.status}`);
+
+        if (!response.ok) {
+            const text = await response.text();
+            let data: any = null;
+            try {
+                data = this.parseResponse(text);
+            } catch (e) {}
+            
+            const errorMessage = data?.detail || data?.message || `Delete failed with status ${response.status}`;
+            throw new Error(errorMessage);
+        }
+    }
 }
 
 

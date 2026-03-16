@@ -284,6 +284,19 @@ export default function AdminDashboardPage() {
         }
     };
 
+    const handleDeleteCandidate = async (candidateId: string, candidateName: string) => {
+        if (!confirm(`Are you absolutely sure you want to delete "${candidateName}" and all associated data? This cannot be undone.`)) {
+            return;
+        }
+        try {
+            await dashboardService.deleteCandidate(candidateId);
+            toast.success(`Candidate "${candidateName}" deleted.`);
+            fetchData();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to delete candidate.');
+        }
+    };
+
     const onScheduleSuccess = (interviewId?: string) => {
         setScheduleTarget(null);
         toast.success(scheduleMode === 'schedule' ? 'Interview scheduled!' : 'Interview rescheduled!');
@@ -673,6 +686,13 @@ export default function AdminDashboardPage() {
                                                             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${candidate.login_disabled ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-orange-50 text-orange-700 hover:bg-orange-100'}`}
                                                         >
                                                             {candidate.login_disabled ? 'Enable Login' : 'Disable Login'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteCandidate(candidate.id, candidate.username)}
+                                                            className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs font-semibold hover:bg-red-700 transition-colors shadow-sm"
+                                                            title="Delete Candidate and all data"
+                                                        >
+                                                            Delete
                                                         </button>
                                                     </div>
                                                 </td>

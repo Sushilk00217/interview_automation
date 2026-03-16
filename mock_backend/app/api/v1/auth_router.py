@@ -546,3 +546,13 @@ async def get_candidate_resume_file(
             media_type=media_type,
             headers=headers
         )
+
+@router.delete("/admin/candidates/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_candidate(
+    candidate_id: uuid.UUID,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """Delete a candidate and all associated data."""
+    await AdminAuthSQLService.delete_candidate(session, candidate_id)
+    return None

@@ -33,5 +33,8 @@ export const dashboardService = {
     },
     reparseResume: async (candidateId: string): Promise<any> => {
         return apiClient.post(`/api/v1/auth/admin/candidates/${candidateId}/reparse-resume`, {});
+    },
+    deleteCandidate: async (candidateId: string): Promise<void> => {
+        return apiClient.delete(`/api/v1/auth/admin/candidates/${candidateId}`);
     }
 };

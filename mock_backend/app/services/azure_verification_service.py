@@ -81,6 +81,28 @@ class AzureVerificationService:
             logger.error(f"Error creating face person (took {time.time() - start_time:.2f}s): {e}")
             return None
 
+    async def delete_face_person(self, person_id: str) -> bool:
+        """Delete a person from Azure Face API."""
+        if not self._initialized or not person_id or person_id.startswith("mock_") or person_id.startswith("detection_"):
+            return True
+            
+        try:
+            url = f"{self.face_api_endpoint}/face/v1.0/persongroups/{self.person_group_id}/persons/{person_id}"
+            headers = {"Ocp-Apim-Subscription-Key": self.face_api_key}
+            
+            client = await self.get_client()
+            response = await client.delete(url, headers=headers)
+            
+            if response.status_code == 404:
+                return True
+                
+            response.raise_for_status()
+            logger.info(f"Deleted Azure Face person {person_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting face person {person_id}: {e}")
+            return False
+
     async def add_face_sample(self, person_id: str, image_data: bytes) -> Optional[str]:
         """Add a face sample to Azure Face API person."""
         if not self._initialized:
@@ -180,6 +202,28 @@ class AzureVerificationService:
         except Exception as e:
             logger.error(f"Error voice profile create (took {time.time() - start_time:.2f}s): {e}")
             return None
+
+    async def delete_voice_profile(self, profile_id: str) -> bool:
+        """Delete a voice profile from Azure Speech Service."""
+        if not self._initialized or not profile_id or profile_id.startswith("mock_") or profile_id.startswith("detection_"):
+            return True
+            
+        try:
+            url = f"https://{self.speech_region}.api.cognitive.microsoft.com/speaker/verification/v2.0/text-independent/profiles/{profile_id}"
+            headers = {"Ocp-Apim-Subscription-Key": self.speech_api_key}
+            
+            client = await self.get_client()
+            response = await client.delete(url, headers=headers)
+            
+            if response.status_code == 404:
+                return True
+                
+            response.raise_for_status()
+            logger.info(f"Deleted Azure voice profile {profile_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting voice profile {profile_id}: {e}")
+            return False
 
     async def enroll_voice_sample(self, profile_id: str, audio_data: bytes, content_type: str = "audio/wav") -> bool:
         """Enroll a voice sample to Azure Speech profile."""
