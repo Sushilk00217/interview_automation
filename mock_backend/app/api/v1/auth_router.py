@@ -333,7 +333,7 @@ async def admin_register_candidate(
             logger.warning(f"BackgroundTasks not available for candidate {new_user.id}")
         
         # logger credentials to terminal for local dev visibility
-        logger.info(f"\n[REGISTRATION] Registered {candidate_email} with password: {password}\n")
+        logger.info(f"\n[REGISTRATION] Registered User: {username} | Password: {password}\n")
         
         return CandidateResponse(
             id=str(new_user.id),

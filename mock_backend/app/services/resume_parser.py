@@ -127,7 +127,7 @@ Return ONLY the JSON object, no additional text or markdown."""
         parsed_json['skills'] = list(all_skills)
         
         logger.info(f"Successfully parsed resume with LLM. Found {len(parsed_json['skills'])} skills")
-        logger.info(f"[ResumeParser] Extracted skills: {parsed_json['skills']}")
+        logger.debug(f"[ResumeParser] Extracted skills: {parsed_json['skills']}")
         return parsed_json
         
     except Exception as e:
