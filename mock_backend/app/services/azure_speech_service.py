@@ -146,7 +146,7 @@ class RecognitionSession:
             )
             
             self.stream = speechsdk.audio.PushAudioInputStream(stream_format=audio_format)
-            logger.info(f"[RecognitionSession] Using RAW PCM 16kHz audio format")
+            logger.debug(f"[RecognitionSession] Using RAW PCM 16kHz audio format")
             audio_config = speechsdk.audio.AudioConfig(stream=self.stream)
             
             # Create recognizer
@@ -164,8 +164,8 @@ class RecognitionSession:
             # Start continuous recognition
             self.recognizer.start_continuous_recognition_async()
             self.is_running = True
-            logger.info(f"[RecognitionSession] Started session {session_id}")
-            print(f"\n[STT] Started session {session_id} with compressed audio support", flush=True)
+            logger.debug(f"[RecognitionSession] Started session {session_id}")
+            logger.debug(f"[STT] Started session {session_id} with compressed audio support")
             
         except Exception as e:
             logger.error(f"Error creating recognition session: {e}")
@@ -176,15 +176,14 @@ class RecognitionSession:
         if evt.result.reason == speechsdk.ResultReason.RecognizingSpeech:
             text = evt.result.text
             if text:
-                # Print to terminal (flush immediately)
-                print(f"\n[AZURE STT PARTIAL] {text}", flush=True)
-                logger.info(f"[Azure STT] Partial: {text}")
+                # Log partial result (debug only to avoid spam)
+                logger.debug(f"[Azure STT] Partial: {text}")
                 # Call the callback in a thread-safe way
                 try:
                     self.on_partial_result(text)
                 except Exception as e:
                     logger.error(f"Error in partial result callback: {e}")
-                    print(f"[STT ERROR] Partial callback error: {e}", flush=True)
+                    logger.error(f"[STT ERROR] Partial callback error: {e}")
     
     def _on_recognized(self, evt: speechsdk.SpeechRecognitionEventArgs):
         """Handle final recognition results."""
@@ -192,19 +191,18 @@ class RecognitionSession:
             text = evt.result.text
             if text:
                 self.final_transcript_parts.append(text)
-                # Print to terminal (flush immediately)
-                print(f"\n[AZURE STT FINAL] {text}", flush=True)
-                logger.info(f"[Azure STT] Final: {text}")
+                # Log final result
+                logger.debug(f"[Azure STT] Final: {text}")
                 # Call the callback (it's synchronous, will handle async internally)
                 try:
                     self.on_final_result(text)
                 except Exception as e:
                     logger.error(f"Error in final result callback: {e}")
-                    print(f"[STT ERROR] Final callback error: {e}", flush=True)
+                    logger.error(f"[STT ERROR] Final callback error: {e}")
     
     def _on_session_stopped(self, evt: speechsdk.SessionEventArgs):
         """Handle session stopped event."""
-        logger.info(f"[RecognitionSession] Session {self.session_id} stopped")
+        logger.debug(f"[RecognitionSession] Session {self.session_id} stopped")
         self.is_running = False
     
     def _on_canceled(self, evt: speechsdk.SpeechRecognitionCanceledEventArgs):
@@ -231,10 +229,10 @@ class RecognitionSession:
                     
                     if self._chunk_count % 10 == 0:
                         logger.debug(f"[RecognitionSession] Pushed {self._chunk_count} audio chunks")
-                        print(f"[STT AUDIO] Pushed {self._chunk_count} audio chunks ({len(audio_chunk)} bytes)", flush=True)
+                        logger.debug(f"[STT AUDIO] Pushed {self._chunk_count} audio chunks ({len(audio_chunk)} bytes)")
             except Exception as e:
                 logger.error(f"Error pushing audio chunk ({len(audio_chunk)} bytes): {e}")
-                print(f"\n[STT ERROR] Failed to push audio: {e}", flush=True)
+                logger.error(f"\n[STT ERROR] Failed to push audio: {e}")
                 # Continue even if one chunk fails
     
     async def stop(self):
@@ -248,7 +246,7 @@ class RecognitionSession:
                 if self.stream:
                     self.stream.close()
                 self.is_running = False
-                logger.info(f"[RecognitionSession] Stopped session {self.session_id}")
+                logger.debug(f"[RecognitionSession] Stopped session {self.session_id}")
             except Exception as e:
                 logger.error(f"Error stopping recognition: {e}")
                 self.is_running = False
@@ -298,14 +296,12 @@ class MockRecognitionSession:
             if sample_idx >= 0:
                 text = self.mock_samples[sample_idx]
                 self.transcript_parts.append(text)
-                # Print to terminal (flush immediately)
-                print(f"\n[MOCK STT PARTIAL] {text}", flush=True)
-                logger.info(f"[Mock STT] Partial: {text}")
+                logger.debug(f"[Mock STT] Partial: {text}")
                 try:
                     self.on_partial_result(text)
                 except Exception as e:
                     logger.error(f"Error in mock partial result callback: {e}")
-                    print(f"[STT ERROR] Mock partial callback error: {e}", flush=True)
+                    logger.error(f"[STT ERROR] Mock partial callback error: {e}")
     
     async def stop(self):
         """Stop the mock session."""

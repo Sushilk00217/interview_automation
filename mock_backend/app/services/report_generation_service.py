@@ -52,7 +52,7 @@ class ReportGenerationService:
         
         # 1️⃣ Prevent duplicate report generation.
         if interview.report_json:
-            logger.info(f"Returning stored report for interview {interview_id}")
+            logger.debug(f"Returning stored report for interview {interview_id}")
             return interview.report_json
         
         # Get session (use provided or latest)

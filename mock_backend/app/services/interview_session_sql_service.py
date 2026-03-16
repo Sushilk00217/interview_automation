@@ -258,7 +258,7 @@ class InterviewSessionSQLService:
                     # The rest will be generated live based on answers
                     from app.services.question_generator_service import question_generator_service
                     initial_questions_to_generate = min(3, num_conversational_questions)
-                    logger.info(f"[start_section] Generating initial {initial_questions_to_generate} project-based questions for conversational section")
+                    logger.debug(f"[start_section] Generating initial {initial_questions_to_generate} project-based questions for conversational section")
                     
                     previous_questions = []
                     previous_answers = []
@@ -301,7 +301,7 @@ class InterviewSessionSQLService:
                             })
                             asked_question_ids.append(str(session_question.id))
                             
-                            logger.info(f"[start_section] Generated project-based question {round_num}: {question_prompt[:80]}...")
+                            logger.debug(f"[start_section] Generated project-based question {round_num}: {question_prompt[:80]}...")
                         else:
                             logger.warning(f"[start_section] Failed to generate question for round {round_num}, creating fallback")
                             # Create a fallback question with proper text instead of breaking
@@ -480,7 +480,7 @@ class InterviewSessionSQLService:
                         await uow.flush()
                         
                         # Log the generated question for debugging
-                        logger.info(f"[get_session_state] Generated live conversational question: {question_prompt[:100]}...")
+                        logger.debug(f"[get_session_state] Generated live conversational question: {question_prompt[:100]}...")
                         
                         # Return the live question
                         return {
@@ -644,7 +644,7 @@ class InterviewSessionSQLService:
             if q_type == "conversational":
                 # Get question text from custom_text (which should contain the actual generated question)
                 question_text = q.custom_text
-                logger.info(f"[get_session_state] Conversational question {q.id}: custom_text = '{question_text[:100] if question_text else 'None'}...'")
+                logger.debug(f"[get_session_state] Conversational question {q.id}: custom_text = '{question_text[:100] if question_text else 'None'}...'")
                 if not question_text or question_text.strip() == "":
                     # Fallback: if custom_text is empty, try to generate a new question
                     logger.warning(f"[get_session_state] Conversational question {q.id} has empty custom_text, generating new question")
@@ -690,14 +690,14 @@ class InterviewSessionSQLService:
                     q.custom_text = live_question.get("prompt", "Tell me about your projects.")
                     question_text = q.custom_text
                     await uow.flush()
-                    logger.info(f"[get_session_state] Generated and updated question text: {question_text[:80]}...")
+                    logger.debug(f"[get_session_state] Generated and updated question text: {question_text[:80]}...")
                 
                 # Ensure question_text is not empty
                 if not question_text or question_text.strip() == "":
                     question_text = "Tell me about your projects and experience."
                     logger.warning(f"[get_session_state] Using fallback question text for question {q.id}")
                 
-                logger.info(f"[get_session_state] Returning conversational question: '{question_text[:100]}...'")
+                logger.debug(f"[get_session_state] Returning conversational question: '{question_text[:100]}...'")
                 return {
                     "type": "conversational",
                     "conversation_round": q.conversation_round or 1,

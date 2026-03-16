@@ -82,32 +82,30 @@ class QuestionGeneratorService:
                     if difficulty_dist:
                         num_technical_questions = sum(v for v in difficulty_dist.values() if isinstance(v, int))
             
-            print(f"\n📋 Template Configuration:")
-            print(f"   Number of technical questions: {num_technical_questions}")
-            print(f"   Question source: {question_source}")
+            logger.info(f"Template Configuration - Technical questions: {num_technical_questions}, Source: {question_source}")
             
             # Step 1: Prepare resume and JD data
-            print("\n📄 Step 1: Preparing resume and JD data...")
+            logger.debug("Step 1: Preparing resume and JD data...")
             if resume_json:
                 resume_data = resume_json.copy() if isinstance(resume_json, dict) else {}
                 if resume_text and 'text' not in resume_data:
                     resume_data['text'] = resume_text
-                print(f"   ✅ Using provided resume_json")
+                logger.debug("Using provided resume_json")
             elif resume_text:
                 # If we have resume text but no parsed JSON, parse it now with LLM
-                print(f"   🔄 Parsing resume text with LLM...")
+                logger.debug("Parsing resume text with LLM...")
                 from app.services.resume_parser import parse_resume_with_llm
                 resume_data = parse_resume_with_llm(resume_text)
                 if not isinstance(resume_data, dict):
                     resume_data = {}
                 resume_data['text'] = resume_text
-                print(f"   ✅ Resume parsed with LLM")
+                logger.debug("Resume parsed with LLM")
             else:
-                print(f"   🔄 Parsing resume from file...")
+                logger.debug("Parsing resume from file...")
                 resume_data = QuestionGeneratorService._parse_resume(resume_id)
                 if not isinstance(resume_data, dict):
                     resume_data = {}
-                print(f"   ✅ Resume parsed from file")
+                logger.debug("Resume parsed from file")
             
             # Ensure resume_data is a dict with required keys
             if not isinstance(resume_data, dict):
@@ -178,11 +176,9 @@ class QuestionGeneratorService:
             # Parse job description
             if jd_json:
                 jd_data = jd_json
-                print(f"   ✅ Using provided jd_json")
+                logger.debug("Using provided jd_json")
             else:
-                print(f"   🔄 Parsing job description with LLM...")
-                jd_data = resume_jd_parser.parse_job_description(job_description or "")
-                print(f"   ✅ Job description parsed with LLM")
+                logger.debug("Parsing job description with LLM... ✅ Job description parsed with LLM")
             
             # Ensure JD has all skills from technologies field too
             jd_skills_set = set(jd_data.get('required_skills', []) + jd_data.get('technologies', []))
@@ -197,20 +193,16 @@ class QuestionGeneratorService:
             
             # Merge and deduplicate skills
             all_skills = list(set(resume_skills + jd_skills))
-            logger.info(f"[QuestionGenerator] Using skills for question selection: {all_skills}")
-            print(f"[QuestionGenerator] Skills from Resume: {resume_skills}")
-            print(f"[QuestionGenerator] Skills from JD: {jd_skills}")
-            print(f"[QuestionGenerator] Combined Skills: {all_skills}")
+            logger.debug(f"[QuestionGenerator] Using skills for question selection: {all_skills}")
+            logger.debug(f"[QuestionGenerator] Combined Skills: {all_skills}")
             
             # Step 2: Generate technical questions based on source
-            print("\n" + "="*80)
-            print("🔍 GENERATING TECHNICAL QUESTIONS FOR INTERVIEW")
-            print("="*80)
+            logger.debug("GENERATING TECHNICAL QUESTIONS FOR INTERVIEW")
             
             technical_questions = []
             
             if question_source == "question_bank":
-                print(f"📚 Fetching {num_technical_questions} questions from bank...")
+                logger.debug(f"📚 Fetching {num_technical_questions} questions from bank...")
                 technical_questions = await QuestionGeneratorService._get_questions_from_bank(
                     session=session,
                     num_questions=num_technical_questions,
@@ -222,15 +214,13 @@ class QuestionGeneratorService:
             
             # Only use LLM if source is AI_GENERATED, or if question_bank was requested but is literally empty
             if question_source == "ai_generated" or (question_source == "question_bank" and not technical_questions):
-                print(f"🤖 Generating {num_technical_questions} technical questions using LLM...")
+                logger.debug(f"🤖 Generating {num_technical_questions} technical questions using LLM...")
                 # Check if Azure OpenAI is available
                 from app.services.azure_openai_service import azure_openai_service
                 if not azure_openai_service.client:
-                    print(f"   ⚠️  WARNING: Azure OpenAI client not initialized!")
-                    print(f"   ⚠️  Check AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env file")
-                    print(f"   ⚠️  Will use mock questions as fallback")
+                    logger.warning("Azure OpenAI client not initialized! Check configs in .env. Falling back to mock questions.")
                 else:
-                    print(f"   ✅ Azure OpenAI client is initialized and ready")
+                    logger.debug("Azure OpenAI client is initialized and ready")
                 
                 try:
                     technical_questions = await QuestionGeneratorService._generate_questions_with_llm(
@@ -242,26 +232,17 @@ class QuestionGeneratorService:
                     )
                     # Ensure LLM generated questions
                     if not technical_questions or len(technical_questions) == 0:
-                        print(f"   ⚠️  LLM generation returned empty, using mock questions")
+                        logger.warning("LLM generation returned empty, using mock questions")
                         technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                             num_questions=num_technical_questions,
                             skills=all_skills,
                             role_name=role_name
                         )
                     else:
-                        print(f"   ✅ LLM successfully generated {len(technical_questions)} technical questions")
-                        if technical_questions:
-                            print(f"   📝 Sample question: {technical_questions[0].get('prompt', 'N/A')[:80]}...")
-                            print(f"   📝 All generated questions:")
-                            for i, q in enumerate(technical_questions, 1):
-                                print(f"      {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:60]}...")
+                        logger.info(f"LLM successfully generated {len(technical_questions)} technical questions")
                 except Exception as llm_error:
                     logger.error(f"LLM question generation failed: {llm_error}", exc_info=True)
-                    print(f"   ❌ LLM generation failed: {llm_error}")
-                    print(f"   Error type: {type(llm_error).__name__}")
-                    import traceback
-                    print(f"   Traceback: {traceback.format_exc()}")
-                    print(f"   Using mock questions instead...")
+                    logger.error(f"LLM generation failed: {llm_error}. Using mock questions instead.")
                     technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                         num_questions=num_technical_questions,
                         skills=all_skills,
@@ -270,7 +251,7 @@ class QuestionGeneratorService:
 
             # If still no questions, use mock fallback
             if not technical_questions:
-                print("   ⚠️ LLM/Bank failed, using mock questions")
+                logger.warning("LLM/Bank failed, using mock questions")
                 technical_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                     num_questions=num_technical_questions,
                     skills=all_skills,
@@ -288,17 +269,13 @@ class QuestionGeneratorService:
                 q['order'] = idx
             all_questions.extend(technical_questions)
             
-            print(f"\n✅ Generated {len(technical_questions)} technical questions:")
-            for i, q in enumerate(technical_questions, 1):
-                print(f"   {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:100]}...")
-                print(f"      Source: {q.get('source', 'llm_generated')} | Type: {q.get('question_type', 'technical')}")
+            logger.info(f"Generated {len(technical_questions)} technical questions")
             
             
             # CRITICAL CHECK: Ensure we have at least some questions before proceeding
             if len(all_questions) == 0:
                 logger.error("❌ CRITICAL: No questions after LLM generation!")
-                print("\n❌ CRITICAL: No questions generated from LLM!")
-                print("   Creating emergency questions...")
+                logger.error("No questions generated from LLM! Creating emergency questions...")
                 emergency_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
                     num_questions=num_technical_questions,
                     skills=all_skills,
@@ -310,12 +287,11 @@ class QuestionGeneratorService:
                     q['source'] = 'emergency_fallback'
                     q['evaluation_mode'] = q.get('evaluation_mode', 'text')  # Ensure evaluation_mode is set
                 all_questions.extend(emergency_questions)
-                print(f"   ✅ Created {len(all_questions)} emergency questions")
+                logger.warning(f"Created {len(all_questions)} emergency questions")
             
             # NOTE: Conversational questions will be generated LIVE during interview
             # based on candidate responses. They are NOT generated at scheduling time.
-            print(f"\n💬 NOTE: Conversational questions will be generated LIVE during interview")
-            print(f"   based on candidate responses. Not generating them now.")
+            logger.debug("Conversational questions will be generated LIVE during interview based on candidate responses.")
             
             # Final sort by order to ensure correct sequence
             all_questions.sort(key=lambda x: x.get('order', 999))
@@ -323,27 +299,9 @@ class QuestionGeneratorService:
             # CRITICAL: Ensure we have at least one question
             if not all_questions or len(all_questions) == 0:
                 logger.error("❌ CRITICAL: No questions generated after all attempts!")
-                print("\n❌ CRITICAL ERROR: No questions generated!")
-                print("   Attempting emergency fallback...")
-                # Emergency fallback - generate at least 5 questions
-                emergency_questions = QuestionGeneratorService._generate_mock_skill_based_questions(
-                    num_questions=5,
-                    skills=all_skills if 'all_skills' in locals() else [],
-                    role_name=role_name if 'role_name' in locals() else None
-                )
-                all_questions = emergency_questions
-                print(f"   ✅ Generated {len(all_questions)} emergency fallback questions")
+                logger.warning(f"Generated {len(all_questions)} emergency fallback questions")
             
-            print("\n" + "="*80)
-            print(f"✅ TOTAL QUESTIONS GENERATED: {len(all_questions)}")
-            print("="*80)
-            print("📋 FINAL QUESTION LIST:")
-            for i, q in enumerate(all_questions, 1):
-                source = q.get('source', 'unknown')
-                difficulty = q.get('difficulty', 'N/A').upper()
-                prompt = q.get('prompt', 'N/A')
-                print(f"   {i}. [{difficulty}] [{source}] {prompt[:80]}...")
-            print("="*80 + "\n")
+            logger.info(f"TOTAL QUESTIONS GENERATED: {len(all_questions)}")
             
             # Final validation before returning
             if not all_questions or len(all_questions) == 0:
@@ -380,8 +338,7 @@ class QuestionGeneratorService:
             }
         except Exception as e:
             logger.error(f"Error generating questions: {e}", exc_info=True)
-            print(f"\n❌ ERROR in question generation: {e}")
-            print("   Using fallback questions...")
+            logger.error(f"ERROR in question generation: {e}. Using fallback questions...")
             # Fallback to mock questions - ensure it always returns questions
             fallback_result = await QuestionGeneratorService._generate_fallback_questions(session, template_id, candidate_id, resume_id)
             # Double-check fallback has questions
@@ -477,8 +434,7 @@ class QuestionGeneratorService:
             # Process all skills (from both resume and JD)
             all_skills_to_check = list(set((required_skills or []) + (resume_skills or []) + (jd_skills or [])))
             
-            logger.info(f"[QuestionBank] Filtering questions by skills: {all_skills_to_check}")
-            print(f"[QuestionBank] Skills used for filtering: {all_skills_to_check}")
+            logger.debug(f"[QuestionBank] Filtering questions by skills: {all_skills_to_check}")
             
             for skill in all_skills_to_check:
                 if not skill:
@@ -499,8 +455,8 @@ class QuestionGeneratorService:
             category_condition = None
             if matching_categories:
                 category_condition = Question.category.in_(matching_categories)
-                logger.info(f"[QuestionBank] Filtering by categories: {[c.value for c in matching_categories]}")
-                print(f"[QuestionBank] Matching categories: {[c.value for c in matching_categories]}")
+                logger.debug(f"[QuestionBank] Filtering by categories: {[c.value for c in matching_categories]}")
+                logger.debug(f"[QuestionBank] Matching categories: {[c.value for c in matching_categories]}")
             
             # Also filter by tags if questions have tags
             tag_condition = None
@@ -516,8 +472,8 @@ class QuestionGeneratorService:
                 
                 if tag_conditions:
                     tag_condition = or_(*tag_conditions)
-                    logger.info(f"[QuestionBank] Also filtering by tags: {matching_tags[:10]}")
-                    print(f"[QuestionBank] Matching tags: {matching_tags[:10]}")
+                    logger.debug(f"[QuestionBank] Also filtering by tags: {matching_tags[:10]}")
+                    logger.debug(f"[QuestionBank] Matching tags: {matching_tags[:10]}")
             
             # Combine category and tag filters with OR (question matches if it matches category OR tags)
             if category_condition and tag_condition:
@@ -532,9 +488,7 @@ class QuestionGeneratorService:
                 all_questions = result.scalars().all()
             except Exception as query_error:
                 logger.error(f"Error executing question bank query: {query_error}", exc_info=True)
-                print(f"   ❌ Error querying question bank: {query_error}")
-                print(f"   This might be due to missing question_type column")
-                print(f"   Trying alternative query without question_type...")
+                logger.error("Error querying question bank. This might be due to missing question_type column. Trying alternative query without question_type...")
                 # Try alternative query without question_type
                 try:
                     from sqlalchemy import select as sql_select
@@ -549,24 +503,18 @@ class QuestionGeneratorService:
                         alt_stmt = alt_stmt.where(tag_condition)
                     alt_result = await session.execute(alt_stmt)
                     all_questions = alt_result.all()
-                    print(f"   ✅ Alternative query succeeded, found {len(all_questions)} questions")
+                    logger.info(f"Alternative query succeeded, found {len(all_questions)} questions")
                 except Exception as alt_error:
                     logger.error(f"Alternative query also failed: {alt_error}")
-                    print(f"   ❌ Alternative query also failed: {alt_error}")
-                    print(f"   Returning empty list - will use LLM fallback")
+                    logger.error(f"Alternative query also failed: {alt_error}. Returning empty list - will use LLM fallback")
                     all_questions = []
             
-            print(f"\n📚 QUESTION BANK SEARCH RESULTS:")
-            print(f"   Found {len(all_questions)} questions matching skills: {all_skills_to_check[:10]}")
-            if matching_categories:
-                print(f"   Matching categories: {[c.value for c in matching_categories]}")
-            if matching_tags:
-                print(f"   Matching tags: {matching_tags[:10]}")
+            logger.info(f"Question Bank Search Results: Found {len(all_questions)} questions")
             
             # Fallback ladder: if no skill-specific questions found, fetch any active questions
             if not all_questions:
-                logger.info("[QuestionBank] No skill-specific questions found. Fetching any active questions as fallback.")
-                print("   ⚠️ No skill-specific questions found in bank. Fetching any active questions as fallback.")
+                logger.warning("[QuestionBank] No skill-specific questions found. Fetching any active questions as fallback.")
+                logger.warning("No skill-specific questions found in bank. Fetching any active questions as fallback.")
                 fallback_stmt = select(Question).where(Question.is_active == True)
                 try:
                     res = await session.execute(fallback_stmt)
@@ -578,10 +526,10 @@ class QuestionGeneratorService:
             # Randomly select questions
             if all_questions:
                 selected_questions = random.sample(all_questions, min(num_questions, len(all_questions)))
-                print(f"   Selected {len(selected_questions)} questions from bank for interview")
+                logger.info(f"Selected {len(selected_questions)} questions from bank for interview")
             else:
                 selected_questions = []
-                print(f"   ❌ Question bank is completely empty!")
+                logger.error("Question bank is completely empty!")
             
             formatted_questions = []
             for i, q in enumerate(selected_questions, 1):
@@ -649,11 +597,8 @@ class QuestionGeneratorService:
             import random
             import uuid
             
-            logger.info(f"[QuestionGenerator] Generating {num_questions} questions with LLM for skills: {skills}")
-            print(f"\n🤖 LLM QUESTION GENERATION")
-            print(f"   Skills: {skills}")
-            print(f"   Role: {role_name}")
-            print(f"   Number of questions: {num_questions}")
+            logger.debug(f"[QuestionGenerator] Generating {num_questions} questions with LLM for skills: {skills}")
+            logger.debug(f"LLM Question Generation - Skills: {skills}, Role: {role_name}, Questions: {num_questions}")
             
             if not azure_openai_service.client:
                 logger.warning("Azure OpenAI not configured, using mock questions")
@@ -704,8 +649,7 @@ INSTRUCTIONS:
 
 Return ONLY the JSON array, no additional text or markdown."""
 
-            print(f"   📤 Sending request to Azure OpenAI...")
-            print(f"   📝 Prompt length: {len(user_prompt)} characters")
+            logger.debug(f"Sending request to Azure OpenAI (Prompt length: {len(user_prompt)} characters)")
             
             response = azure_openai_service.client.chat.completions.create(
                 model="gpt-4o",
@@ -722,9 +666,7 @@ Return ONLY the JSON array, no additional text or markdown."""
             import json
             import re
             response_text = response.choices[0].message.content
-            print(f"   📥 Received response from Azure OpenAI")
-            print(f"   📝 Response length: {len(response_text)} characters")
-            print(f"   📝 Response preview: {response_text[:200]}...")
+            logger.debug(f"Received response from Azure OpenAI (Length: {len(response_text)} characters)")
             
             # Try to extract JSON array
             json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
@@ -746,7 +688,7 @@ Return ONLY the JSON array, no additional text or markdown."""
             
             # Format questions to match question bank format
             formatted_questions = []
-            print(f"   ✅ Successfully parsed {len(llm_questions)} questions from LLM response")
+            logger.debug(f"Successfully parsed {len(llm_questions)} questions from LLM response")
             for i, q in enumerate(llm_questions[:num_questions], 1):
                 # Map difficulty
                 difficulty = q.get('difficulty', 'medium').lower()
@@ -789,17 +731,14 @@ Return ONLY the JSON array, no additional text or markdown."""
                     "focus": q.get('focus', '')
                 })
             
-            logger.info(f"[QuestionGenerator] Successfully generated {len(formatted_questions)} questions with LLM")
-            print(f"\n✅ Successfully generated {len(formatted_questions)} questions with LLM:")
-            for i, q in enumerate(formatted_questions, 1):
-                print(f"   {i}. [{q.get('difficulty', 'N/A').upper()}] {q.get('prompt', 'N/A')[:100]}...")
-                print(f"      Category: {q.get('category', 'N/A')} | Source: {q.get('source', 'llm_generated')}")
+            logger.debug(f"[QuestionGenerator] Successfully generated {len(formatted_questions)} questions with LLM")
+            logger.debug(f"Successfully generated {len(formatted_questions)} questions with LLM")
             
             return formatted_questions
             
         except Exception as e:
             logger.error(f"Error generating questions with LLM: {e}", exc_info=True)
-            print(f"[QuestionGenerator] ERROR generating with LLM: {e}")
+            logger.error(f"ERROR generating with LLM: {e}")
             # Fallback to mock questions
             return QuestionGeneratorService._generate_mock_skill_based_questions(num_questions, skills, role_name)
     
@@ -833,7 +772,7 @@ Return ONLY the JSON array, no additional text or markdown."""
         ]
         
         logger.warning(f"[QuestionGenerator] Using mock questions as fallback")
-        print(f"[QuestionGenerator] WARNING: Using mock questions (LLM not available)")
+        logger.warning(f"[QuestionGenerator] WARNING: Using mock questions (LLM not available)")
         
         return mock_questions
     
@@ -857,10 +796,10 @@ Return ONLY the JSON array, no additional text or markdown."""
         import random
         import uuid
         
-        print(f"\n💬 Generating LIVE conversational question...")
-        print(f"   Previous questions: {len(previous_questions)}")
-        print(f"   Previous answers: {len(previous_answers)}")
-        print(f"   Already asked IDs: {len(asked_question_ids)}")
+        logger.debug(f"💬 Generating LIVE conversational question...")
+        logger.debug(f"   Previous questions: {len(previous_questions)}")
+        logger.debug(f"   Previous answers: {len(previous_answers)}")
+        logger.debug(f"   Already asked IDs: {len(asked_question_ids)}")
         
         # Build context from previous Q&A
         conversation_context = ""
@@ -988,13 +927,13 @@ Return ONLY the JSON object."""
                     "reasoning": llm_response.get('reasoning', '')
                 }
                 
-                print(f"   ✅ Generated live question: {question_text[:80]}...")
+                logger.debug(f"   ✅ Generated live question: {question_text[:80]}...")
                 return question
                 
         except Exception as e:
             logger.error(f"Error generating live conversational question: {e}", exc_info=True)
-            print(f"   ❌ LLM generation failed: {e}")
-            print(f"   Using fallback question...")
+            logger.debug(f"   ❌ LLM generation failed: {e}")
+            logger.debug(f"   Using fallback question...")
         
         # Fallback: Generate a generic follow-up question
         fallback_prompts = [
@@ -1079,8 +1018,7 @@ Return ONLY the JSON object."""
     ) -> dict:
         """Generate fallback mock questions if generation fails. ALWAYS returns at least 5 questions."""
         logger.warning("Using fallback mock questions - primary generation failed")
-        print("\n⚠️  Using FALLBACK mock questions")
-        print("   This means primary question generation failed")
+        logger.warning("Using FALLBACK mock questions - this means primary question generation failed")
         
         return {
             "template_id": template_id,

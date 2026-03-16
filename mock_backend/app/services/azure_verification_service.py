@@ -48,7 +48,7 @@ class AzureVerificationService:
     async def create_face_person(self, candidate_id: str, candidate_name: str) -> Optional[str]:
         """Create a person in Azure Face API for the candidate."""
         if not self._initialized:
-            logger.info(f"[MOCK] Created face person for candidate {candidate_id}")
+            logger.debug(f"[MOCK] Created face person for candidate {candidate_id}")
             return f"mock_person_{candidate_id}"
         
         if self._face_verification_available is False:
@@ -74,7 +74,7 @@ class AzureVerificationService:
             response.raise_for_status()
             person_id = response.json().get("personId")
             self._face_verification_available = True
-            logger.info(f"Created Azure Face person {person_id} (took {time.time() - start_time:.2f}s)")
+            logger.debug(f"Created Azure Face person {person_id} (took {time.time() - start_time:.2f}s)")
             return person_id
                 
         except Exception as e:
@@ -96,7 +96,7 @@ class AzureVerificationService:
                 response = await client.post(detect_url, content=image_data, headers=headers)
                 response.raise_for_status()
                 faces = response.json()
-                logger.info(f"Face detected (took {time.time() - start_time:.2f}s)")
+                logger.debug(f"Face detected (took {time.time() - start_time:.2f}s)")
                 return faces[0].get("faceId") if faces else f"detected_{person_id}"
             except Exception as e:
                 logger.error(f"Error detect (took {time.time() - start_time:.2f}s): {e}")
@@ -110,7 +110,7 @@ class AzureVerificationService:
                 self._face_verification_available = False
                 return await self.add_face_sample(f"detection_only_{person_id}", image_data)
             response.raise_for_status()
-            logger.info(f"Face sample persisted (took {time.time() - start_time:.2f}s)")
+            logger.debug(f"Face sample persisted (took {time.time() - start_time:.2f}s)")
             return response.json().get("persistedFaceId")
         except Exception as e:
             logger.error(f"Error add_face_sample (took {time.time() - start_time:.2f}s): {e}")
@@ -152,7 +152,7 @@ class AzureVerificationService:
             
             result = v_res.json()
             verified = result.get("isIdentical", False) and result.get("confidence", 0) > 0.7
-            logger.info(f"Face verification complete: {verified} (took {time.time() - start_time:.2f}s)")
+            logger.debug(f"Face verification complete: {verified} (took {time.time() - start_time:.2f}s)")
             return verified
                 
         except Exception as e:
@@ -175,7 +175,7 @@ class AzureVerificationService:
                 return f"detection_only_voice_{candidate_id}"
             
             response.raise_for_status()
-            logger.info(f"Voice profile created (took {time.time() - start_time:.2f}s)")
+            logger.debug(f"Voice profile created (took {time.time() - start_time:.2f}s)")
             return response.json().get("profileId")
         except Exception as e:
             logger.error(f"Error voice profile create (took {time.time() - start_time:.2f}s): {e}")
@@ -198,7 +198,7 @@ class AzureVerificationService:
             response = await client.post(url, content=audio_data, headers=headers)
             if response.status_code in [401, 403]: return True
             response.raise_for_status()
-            logger.info(f"Voice enrollment complete (took {time.time() - start_time:.2f}s)")
+            logger.debug(f"Voice enrollment complete (took {time.time() - start_time:.2f}s)")
             return True
         except Exception as e:
             logger.error(f"Error enrollment (took {time.time() - start_time:.2f}s): {e}")

@@ -34,6 +34,7 @@ class CandidateResponse(BaseModel):
     jd_json: Optional[dict] = None
     role_name: Optional[str] = None
     match_score: Optional[float] = None
+    password: Optional[str] = None
 
     class Config:
         from_attributes = True

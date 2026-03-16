@@ -201,7 +201,7 @@ async def answer_ws(websocket: WebSocket):
             nonlocal partial_text
             partial_text = text
             # Print transcript to terminal (flush immediately)
-            print(f"\n[STT PARTIAL] {text}", flush=True)
+            logger.info(f"\n[STT PARTIAL] {text}")
             logger.info(f"[STT] Partial transcript: {text}")
             try:
                 # Schedule async send in the event loop
@@ -220,7 +220,7 @@ async def answer_ws(websocket: WebSocket):
             nonlocal partial_text
             partial_text = text
             # Print transcript to terminal (flush immediately)
-            print(f"\n[STT FINAL] {text}", flush=True)
+            logger.info(f"\n[STT FINAL] {text}")
             logger.info(f"[STT] Final transcript: {text}")
             try:
                 # Schedule async send in the event loop
@@ -236,7 +236,7 @@ async def answer_ws(websocket: WebSocket):
         
         # Check if Azure STT is initialized
         is_azure_mode = azure_speech_service._initialized
-        print(f"\n[STT STATUS] Azure Speech Service: {'INITIALIZED' if is_azure_mode else 'MOCK MODE'}", flush=True)
+        logger.info(f"\n[STT STATUS] Azure Speech Service: {'INITIALIZED' if is_azure_mode else 'MOCK MODE'}")
         logger.info(f"[STT] Azure Speech Service initialized: {is_azure_mode}")
         
         # Create recognition session
@@ -246,7 +246,7 @@ async def answer_ws(websocket: WebSocket):
             on_final_result=send_final,
         )
         
-        print(f"[STT] Recognition session created: {transcript_id}", flush=True)
+        logger.info(f"[STT] Recognition session created: {transcript_id}")
         logger.info(f"[STT] Recognition session created: {transcript_id}")
         
         # Send acknowledgment
@@ -270,12 +270,12 @@ async def answer_ws(websocket: WebSocket):
                     send_partial._chunk_count = 0
                 send_partial._chunk_count += 1
                 if send_partial._chunk_count == 1 or send_partial._chunk_count % 50 == 0:
-                    print(f"[STT] Received audio chunk #{send_partial._chunk_count}: {len(audio_chunk)} bytes", flush=True)
+                    logger.info(f"[STT] Received audio chunk #{send_partial._chunk_count}: {len(audio_chunk)} bytes")
                 if recognition_session:
                     recognition_session.push_audio(audio_chunk)
                 else:
                     logger.warning("[STT] No recognition session available to process audio")
-                    print("[STT ERROR] No recognition session available!", flush=True)
+                    logger.error("[STT ERROR] No recognition session available!")
             
             if "text" in message:
                 try:

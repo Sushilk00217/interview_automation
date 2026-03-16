@@ -17,6 +17,7 @@ import ScheduleInterviewModal from '@/components/admin/ScheduleInterviewModal';
 import CancelInterviewDialog from '@/components/admin/CancelInterviewDialog';
 import ResumePreviewModal from '@/components/admin/ResumePreviewModal';
 import InterviewReportModal from '@/components/admin/InterviewReportModal';
+import CredentialsCard from '@/components/admin/CredentialsCard';
 import { Toast, useToast } from '@/components/ui/Toast';
 
 // --- Types ----------------------------------------------------------------------
@@ -123,6 +124,7 @@ export default function AdminDashboardPage() {
     const [email, setEmail] = useState('');
     const [jobDescription, setJobDescription] = useState('');
     const [resumeFile, setResumeFile] = useState<File | null>(null);
+    const [registeredData, setRegisteredData] = useState<{username: string, password?: string} | null>(null);
 
     // -- Schedule / Reschedule ---------------------------------------------------
     const [scheduleTarget, setScheduleTarget] = useState<CandidateRow | null>(null);
@@ -309,6 +311,7 @@ export default function AdminDashboardPage() {
         setShowRegisterModal(true);
         setRegisterError(''); setRegisterSuccess('');
         setCandidateName(''); setEmail(''); setJobDescription(''); setResumeFile(null);
+        setRegisteredData(null);
     };
 
     const handleRegisterCandidate = async (e: React.FormEvent) => {
@@ -327,10 +330,13 @@ export default function AdminDashboardPage() {
             formData.append('candidate_email', email);
             formData.append('job_description', jobDescription);
             formData.append('resume', resumeFile);
-            await authService.registerCandidateWithResume(formData);
-            setRegisterSuccess(`"${candidateName}" registered! Password sent via email.`);
+            const response = await authService.registerCandidateWithResume(formData);
+            setRegisteredData({
+                username: response.username,
+                password: response.password
+            });
+            setRegisterSuccess(`"${candidateName}" registered successfully!`);
             fetchData();
-            setTimeout(() => { setShowRegisterModal(false); setRegisterSuccess(''); }, 3000);
         } catch (err: any) {
             setRegisterError(err.message || 'Registration failed. Please try again.');
         } finally {
@@ -778,45 +784,52 @@ export default function AdminDashboardPage() {
                         {registerSuccess && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{registerSuccess}</div>}
                         {registerError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{registerError}</div>}
 
-                        <form onSubmit={handleRegisterCandidate} className="space-y-4">
-                            {[
-                                { label: 'Candidate Name', value: candidateName, setter: setCandidateName, placeholder: 'Full Name', type: 'text' },
-                                { label: 'Email', value: email, setter: setEmail, placeholder: 'Email address', type: 'email' },
-                            ].map(({ label, value, setter, placeholder, type }) => (
-                                <div key={label}>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                                    <input
-                                        type={type} value={value} onChange={e => setter(e.target.value)}
-                                        placeholder={placeholder} required disabled={registerLoading}
+                        {!registeredData ? (
+                            <form onSubmit={handleRegisterCandidate} className="space-y-4">
+                                {[
+                                    { label: 'Candidate Name', value: candidateName, setter: setCandidateName, placeholder: 'Full Name', type: 'text' },
+                                    { label: 'Email', value: email, setter: setEmail, placeholder: 'Email address', type: 'email' },
+                                ].map(({ label, value, setter, placeholder, type }) => (
+                                    <div key={label}>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                                        <input
+                                            type={type} value={value} onChange={e => setter(e.target.value)}
+                                            placeholder={placeholder} required disabled={registerLoading}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                ))}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
+                                    <textarea
+                                        value={jobDescription} onChange={e => setJobDescription(e.target.value)}
+                                        rows={3} placeholder="Paste Job Description here..." required disabled={registerLoading}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
-                            ))}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Job Description</label>
-                                <textarea
-                                    value={jobDescription} onChange={e => setJobDescription(e.target.value)}
-                                    rows={3} placeholder="Paste Job Description here..." required disabled={registerLoading}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Resume (PDF/Doc)</label>
-                                <input
-                                    type="file" accept=".pdf,.doc,.docx" required disabled={registerLoading}
-                                    onChange={e => setResumeFile(e.target.files?.[0] ?? null)}
-                                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                />
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setShowRegisterModal(false)} disabled={registerLoading} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50">Cancel</button>
-                                <button type="submit" disabled={registerLoading} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                                    {registerLoading ? (
-                                        <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Registering...</>
-                                    ) : 'Register Candidate'}
-                                </button>
-                            </div>
-                        </form>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Resume (PDF/Doc)</label>
+                                    <input
+                                        type="file" accept=".pdf,.doc,.docx" required disabled={registerLoading}
+                                        onChange={e => setResumeFile(e.target.files?.[0] ?? null)}
+                                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                    />
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button type="button" onClick={() => setShowRegisterModal(false)} disabled={registerLoading} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50">Cancel</button>
+                                    <button type="submit" disabled={registerLoading} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                                        {registerLoading ? (
+                                            <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Registering...</>
+                                        ) : 'Register Candidate'}
+                                    </button>
+                                </div>
+                            </form>
+                        ) : (
+                            <CredentialsCard 
+                                username={registeredData.username} 
+                                password={registeredData.password} 
+                            />
+                        )}
                     </div>
                 </div>
             )}

@@ -35,12 +35,17 @@ except ImportError:
 except Exception as e:
     logging.getLogger(__name__).warning(f"Error loading .env file: {e}")
  
+from app.core.config import settings
+
 # Configure logging
+LOG_LEVEL_STR = settings.LOG_LEVEL.upper()
+LOG_LEVEL = getattr(logging, LOG_LEVEL_STR, logging.INFO)
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=LOG_LEVEL,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)   
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager  
 async def lifespan(app: FastAPI):

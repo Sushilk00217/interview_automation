@@ -145,6 +145,7 @@ export interface CandidateResponse {
     jd_json?: any;
     role_name?: string | null;
     match_score?: number | null;
+    password?: string;
 }
 
 export interface ToggleLoginResponse {

@@ -37,7 +37,13 @@ async def parse_candidate_resume(candidate_id: uuid.UUID, password: str = None):
                 # 1. Send Welcome Email (if password provided)
                 if password:
                     try:
-                        await email_service.send_candidate_password_email(user.email, profile.first_name, password)
+                        await email_service.send_candidate_password_email(
+                            user.email, 
+                            profile.first_name, 
+                            user.username,
+                            password, 
+                            resume_path=profile.resume_path
+                        )
                     except Exception as e:
                         logger.error(f"Failed to send welcome email to {user.email}: {e}")
 

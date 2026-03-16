@@ -332,8 +332,8 @@ async def admin_register_candidate(
         else:
             logger.warning(f"BackgroundTasks not available for candidate {new_user.id}")
         
-        # Print credentials to terminal for local dev visibility
-        print(f"\n[REGISTRATION] Registered {candidate_email} with password: {password}\n")
+        # logger credentials to terminal for local dev visibility
+        logger.info(f"\n[REGISTRATION] Registered User: {username} | Password: {password}\n")
         
         return CandidateResponse(
             id=str(new_user.id),
@@ -343,7 +343,8 @@ async def admin_register_candidate(
             login_disabled=new_user.login_disabled,
             created_at=new_user.created_at,
             job_description=job_description,
-            role_name=profile.role_name
+            role_name=profile.role_name,
+            password=password
         )
 
 @router.get("/admin/candidates", response_model=PaginatedCandidateResponse)
