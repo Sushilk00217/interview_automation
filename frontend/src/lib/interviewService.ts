@@ -28,8 +28,8 @@ class InterviewService {
 
         controlWebSocket.disconnect();
 
-        // Add a small delay to ensure session is created before connecting
-        setTimeout(() => {
+        const state = controlWebSocket.getReadyState();
+        if (state !== WebSocket.CONNECTING && state !== WebSocket.OPEN) {
             controlWebSocket.connect({
                 interviewId: this.interviewId!,
                 candidateToken: this.candidateToken!,
@@ -67,7 +67,7 @@ class InterviewService {
                     }
                 },
             });
-        }, 500); // 500ms delay to ensure session is created
+        }
     }
 
     async startInterview(): Promise<InterviewState> {

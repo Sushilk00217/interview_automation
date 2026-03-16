@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/interviewStore";
 import InterviewShell from "@/components/interview/InterviewShell";
 import SectionSelector from "@/components/interview/SectionSelector";
+import { controlWebSocket } from "@/lib/controlWebSocket";
 
 export default function InterviewPage() {
     const interviewId = useInterviewStore((s) => s.interviewId);
@@ -16,26 +17,47 @@ export default function InterviewPage() {
     const error = useInterviewStore((s) => s.error);
     const startInterview = useInterviewStore((s) => s.startInterview);
     const initialize = useInterviewStore((s) => s.initialize);
+    const terminate = useInterviewStore((s) => s.terminate);
     const hasStarted = useRef(false);
+    const hasInitialized = useRef(false);
 
     const router = useRouter();
 
     useEffect(() => {
-        if (!interviewId || !candidateToken) {
-            router.replace("/candidate");
-            return;
-        }
+        if (hasInitialized.current) return;
 
-        if (!isConnected) {
-            initialize(interviewId, candidateToken);
-            return;
-        }
+        const state = controlWebSocket.getReadyState();
+        if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
 
+        if (!interviewId || !candidateToken) return;
+
+        hasInitialized.current = true;
+        initialize(interviewId, candidateToken);
+
+        return () => {
+            // Do NOT call terminate() here — it resets Zustand store
+            // and breaks StrictMode second mount
+            // terminate() is handled by beforeunload and navigation events
+        };
+    }, [interviewId, candidateToken]);
+
+    // Keep the logic to call startInterview when connected
+    useEffect(() => {
+        if (!isConnected) return;
         if (hasStarted.current) return;
 
         hasStarted.current = true;
         startInterview();
-    }, [interviewId, candidateToken, isConnected, startInterview, initialize, router]);
+    }, [isConnected, startInterview]);
+
+    useEffect(() => {
+        const handleUnload = () => terminate();
+        window.addEventListener('beforeunload', handleUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleUnload);
+            terminate();
+        };
+    }, []);
 
     // Redirect to summary page when interview completes
     useEffect(() => {

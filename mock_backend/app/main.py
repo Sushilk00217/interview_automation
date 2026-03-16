@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import auth_router, dashboard_router
 from app.api.v1 import interview_router
@@ -62,12 +63,7 @@ app = FastAPI(title="AI Interview Automation Mock Backend", lifespan=lifespan)
 # CORS Middleware - Allow all origins in development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],

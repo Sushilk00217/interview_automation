@@ -178,6 +178,7 @@ export const useInterviewStore = create<InterviewStore>((set, get) => ({
     },
 
     terminate: () => {
+        if (!get().interviewId && !get().isConnected) return; // already terminated, skip
         interviewService.terminate();
         set({
             interviewId: null,

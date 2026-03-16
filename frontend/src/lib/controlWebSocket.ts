@@ -15,11 +15,20 @@ class ControlWebSocket {
     private heartbeatIntervalSec: number = 10;
 
     connect(params: ConnectParams): void {
+        if (this.ws) {
+            if (
+                this.ws.readyState === WebSocket.OPEN ||
+                this.ws.readyState === WebSocket.CONNECTING
+            ) {
+                console.warn('[controlWebSocket] Already open or connecting. Skipping duplicate connect.');
+                return;
+            }
+            this.ws.close();
+            this.ws = null;
+        }
+
         const { interviewId, candidateToken, onOpen, onTerminate, onError, onClose } = params;
 
-        if (this.ws) {
-            this.disconnect();
-        }
 
         const wsBase = getWSBaseURL();
         const fullUrl = `${wsBase}/api/v1/proctoring/ws`;
@@ -91,6 +100,7 @@ class ControlWebSocket {
     }
 
     disconnect(): void {
+        if (!this.ws || this.ws.readyState === WebSocket.CLOSED) return;
         this.stopHeartbeat();
         if (this.ws) {
             this.ws.onclose = null; // Prevent triggering onClose during manual disconnect
@@ -114,6 +124,10 @@ class ControlWebSocket {
             clearInterval(this.heartbeatIntervalId);
             this.heartbeatIntervalId = null;
         }
+    }
+
+    getReadyState(): number {
+        return this.ws?.readyState ?? WebSocket.CLOSED;
     }
 }
 
