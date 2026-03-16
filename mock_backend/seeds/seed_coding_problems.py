@@ -11,12 +11,12 @@ async def seed_coding_problems(session: AsyncSession):
     """Seed the Question Bank with initial set of coding problems."""
     logger.info("Seeding Coding Problems...")
     
-    # Check if we already have coding problems
-    stmt = select(literal(1)).select_from(CodingProblem).limit(1)
-    result = await session.execute(stmt)
-    if result.scalar() is not None:
-        logger.info("[coding_seed] Coding problems already populated. Skipping.")
-        return
+    # No longer skipping if already populated; we want to ensure latest starter code is there
+    # stmt = select(literal(1)).select_from(CodingProblem).limit(1)
+    # result = await session.execute(stmt)
+    # if result.scalar() is not None:
+    #     logger.info("[coding_seed] Coding problems already populated. Skipping.")
+    #     return
 
     BOILERPLATES = {
         "Two Sum": {
@@ -135,39 +135,76 @@ async def seed_coding_problems(session: AsyncSession):
     ]
 
     for p in problems_data:
-        # 1. Create Question
-        question = Question(
-            text=p["description"],
-            category=p["category"],
-            difficulty=p["difficulty"],
-            question_type=QuestionType.CODING,
-            tags=["coding", p["category"].value.lower()]
-        )
-        session.add(question)
-        await session.flush() # Get question.id
+        # 1. Check if problem already exists by title
+        stmt = select(CodingProblem).where(CodingProblem.title == p["title"])
+        result = await session.execute(stmt)
+        existing_problem = result.scalars().first()
 
-        # 2. Create CodingProblem
-        coding_problem = CodingProblem(
-            question_id=question.id,
-            title=p["title"],
-            description=p["description"],
-            difficulty=p["difficulty"].value,
-            starter_code=p["starter_code"],
-            time_limit_sec=900
-        )
-        session.add(coding_problem)
-        await session.flush() # Get coding_problem.id
+        if existing_problem:
+            logger.info(f"[coding_seed] Updating existing problem: {p['title']}")
+            # Update CodingProblem
+            existing_problem.description = p["description"]
+            existing_problem.difficulty = p["difficulty"].value
+            existing_problem.starter_code = p["starter_code"]
+            
+            # Update associated Question
+            stmt_q = select(Question).where(Question.id == existing_problem.question_id)
+            res_q = await session.execute(stmt_q)
+            question = res_q.scalars().first()
+            if question:
+                question.text = p["description"]
+                question.category = p["category"]
+                question.difficulty = p["difficulty"]
+            
+            # Sync Test Cases: simpler to replace since we have cascade delete-orphan
+            from sqlalchemy import delete
+            await session.execute(delete(TestCase).where(TestCase.problem_id == existing_problem.id))
+            
+            for tc in p["test_cases"]:
+                new_tc = TestCase(
+                    problem_id=existing_problem.id,
+                    input=tc["input"],
+                    expected_output=tc["expected_output"],
+                    is_hidden=tc["is_hidden"],
+                    order=tc["order"]
+                )
+                session.add(new_tc)
 
-        # 3. Create TestCases
-        for tc in p["test_cases"]:
-            test_case = TestCase(
-                problem_id=coding_problem.id,
-                input=tc["input"],
-                expected_output=tc["expected_output"],
-                is_hidden=tc["is_hidden"],
-                order=tc["order"]
+        else:
+            logger.info(f"[coding_seed] Creating new problem: {p['title']}")
+            # 1. Create Question
+            question = Question(
+                text=p["description"],
+                category=p["category"],
+                difficulty=p["difficulty"],
+                question_type=QuestionType.CODING,
+                tags=["coding", p["category"].value.lower()]
             )
-            session.add(test_case)
+            session.add(question)
+            await session.flush() # Get question.id
+
+            # 2. Create CodingProblem
+            coding_problem = CodingProblem(
+                question_id=question.id,
+                title=p["title"],
+                description=p["description"],
+                difficulty=p["difficulty"].value,
+                starter_code=p["starter_code"],
+                time_limit_sec=900
+            )
+            session.add(coding_problem)
+            await session.flush() # Get coding_problem.id
+
+            # 3. Create TestCases
+            for tc in p["test_cases"]:
+                test_case = TestCase(
+                    problem_id=coding_problem.id,
+                    input=tc["input"],
+                    expected_output=tc["expected_output"],
+                    is_hidden=tc["is_hidden"],
+                    order=tc["order"]
+                )
+                session.add(test_case)
 
     await session.commit()
-    logger.info(f"[OK] Seeded {len(problems_data)} coding problems into the bank.")
+    logger.info(f"[OK] Seeded/Updated {len(problems_data)} coding problems into the bank.")

@@ -10,12 +10,12 @@ async def seed_question_bank(session: AsyncSession):
     """Seed the Question Bank with initial set of questions."""
     logger.info("Seeding Question Bank...")
     
-    # Check if we already have questions
-    stmt = select(literal(1)).select_from(Question).limit(1)
-    result = await session.execute(stmt)
-    if result.scalar() is not None:
-        logger.info("[question_seed] Question bank already populated. Skipping.")
-        return
+    # No longer skipping if already populated; we want to ensure latest questions are there
+    # stmt = select(literal(1)).select_from(Question).limit(1)
+    # result = await session.execute(stmt)
+    # if result.scalar() is not None:
+    #     logger.info("[question_seed] Question bank already populated. Skipping.")
+    #     return
 
     questions_raw = [
         # --- PYTHON ---
@@ -127,8 +127,21 @@ async def seed_question_bank(session: AsyncSession):
         {"text": "What is the Law of Large Numbers and how does it relate to probability?", "category": CategoryEnum.STATISTICS, "difficulty": DifficultyEnum.HARD, "tags": ["probability", "theory"]},
     ]
 
-    questions = [Question(**q) for q in questions_raw]
+    for q_data in questions_raw:
+        # Check if question already exists by text
+        stmt = select(Question).where(Question.text == q_data["text"])
+        result = await session.execute(stmt)
+        existing = result.scalars().first()
+
+        if existing:
+            # Update existing
+            existing.category = q_data["category"]
+            existing.difficulty = q_data["difficulty"]
+            existing.tags = q_data["tags"]
+        else:
+            # Create new
+            new_q = Question(**q_data)
+            session.add(new_q)
     
-    session.add_all(questions)
     await session.commit()
-    logger.info(f"[OK] Seeded {len(questions)} realistic interview questions into the bank.")
+    logger.info(f"[OK] Seeded/Updated realistic interview questions into the bank.")
