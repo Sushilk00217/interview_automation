@@ -8,7 +8,7 @@ from app.api.v1 import candidate_profile_router
 from app.api.v1 import session_router
 from app.api.v1 import verification_router
 from app.api.v1 import template_router
-from app.api.v1 import coding_router
+from app.api.v1 import coding_router 
 
 from contextlib import asynccontextmanager
 from app.db.sql.session import AsyncSessionLocal, test_database_connection
@@ -27,7 +27,7 @@ try:
         # Try parent directory (project root)
         env_path = Path(__file__).resolve().parent.parent / ".env"
         if env_path.exists():
-            load_dotenv(env_path)
+            load_dotenv(env_path) 
             logging.getLogger(__name__).info(f"Loaded .env file from: {env_path}")
         else:
             logging.getLogger(__name__).warning(f".env file not found. Tried: {Path(__file__).resolve().parent / '.env'} and {Path(__file__).resolve().parent.parent / '.env'}")
@@ -36,14 +36,9 @@ except ImportError:
 except Exception as e:
     logging.getLogger(__name__).warning(f"Error loading .env file: {e}")
  
-from app.core.config import settings
-
-# Configure logging
-LOG_LEVEL_STR = settings.LOG_LEVEL.upper()
-LOG_LEVEL = getattr(logging, LOG_LEVEL_STR, logging.INFO)
-
-logging.basicConfig(
-    level=LOG_LEVEL,
+# Configure logging 
+logging.basicConfig( 
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -66,10 +61,10 @@ app.add_middleware(
     allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
+    allow_headers=["*"], 
+    expose_headers=["*"],    
+) 
+ 
 # Router inclusions
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(dashboard_router.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
