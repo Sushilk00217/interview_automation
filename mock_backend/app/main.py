@@ -58,7 +58,13 @@ app = FastAPI(title="AI Interview Automation Mock Backend", lifespan=lifespan)
 # CORS Middleware - Allow all origins in development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "https://zealous-mud-0547b0100.6.azurestaticapps.net",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"], 
